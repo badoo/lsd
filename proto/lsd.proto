@@ -1,0 +1,44 @@
+package lsd;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unsafe_marshaler_all) = true;
+option (gogoproto.unsafe_unmarshaler_all) = true;
+
+enum request_msgid {
+	REQUEST_NEW_EVENTS = 1;
+}
+
+enum response_msgid {
+	RESPONSE_GENERIC = 1;
+	RESPONSE_OFFSETS = 2;
+}
+
+enum errno {
+	ERRNO_GENERIC = 1;
+}
+
+message request_new_events {
+	message event_t {
+		required string category = 1;
+		required uint64 inode = 2;
+		required uint64 offset = 3;
+		repeated string lines = 4;
+	}
+	repeated event_t events = 1;
+}
+
+message response_offsets {
+	message offset_t {
+		required uint64 inode = 1;
+		required uint64 offset = 2;
+	}
+
+	repeated offset_t offsets = 1;
+}
+
+message response_generic {
+	required sint32 error_code = 1;
+	optional string error_text = 2;
+}
+
