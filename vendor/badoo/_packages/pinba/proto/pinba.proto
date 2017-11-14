@@ -1,0 +1,45 @@
+syntax = "proto2";
+
+package Pinba;
+option optimize_for = LITE_RUNTIME;
+
+// to generate .pb.go, run something like this
+//  $ cd pinba/proto
+//  $ protoc --gogo_out=. -I$GOPATH/src:$GOPATH/src/github.com/gogo/protobuf/protobuf:. pinba.proto
+
+// gogoprotobuf page and build instructions: https://github.com/gogo/protobuf
+// options we use:
+//  sizer_all, unsafe_marshaler_all, unsafe_unmarshaler_all - generate marshal/unmarshal code for each message (fast fast!)
+//  (gogoproto.nullable) = false - generate non pointer fields (reduces GC pressure, most fields are of primitive type anyway)
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unsafe_marshaler_all) = true;
+option (gogoproto.unsafe_unmarshaler_all) = true;
+
+message Request {
+	option (gogoproto.goproto_unrecognized) = false;
+
+	required string hostname         =  1 [(gogoproto.nullable) = false];
+	required string server_name      =  2 [(gogoproto.nullable) = false];
+	required string script_name      =  3 [(gogoproto.nullable) = false];
+	required uint32 request_count	 =  4 [(gogoproto.nullable) = false];
+	required uint32 document_size	 =  5 [(gogoproto.nullable) = false];
+	required uint32 memory_peak      =  6 [(gogoproto.nullable) = false];
+	required float request_time      =  7 [(gogoproto.nullable) = false];
+	required float ru_utime          =  8 [(gogoproto.nullable) = false];
+	required float ru_stime          =  9 [(gogoproto.nullable) = false];
+
+	repeated uint32 timer_hit_count  = 10 [(gogoproto.nullable) = false];
+	repeated float timer_value       = 11 [(gogoproto.nullable) = false];
+	repeated uint32 timer_tag_count  = 12 [(gogoproto.nullable) = false];
+	repeated uint32 timer_tag_name   = 13 [(gogoproto.nullable) = false];
+	repeated uint32 timer_tag_value  = 14 [(gogoproto.nullable) = false];
+	repeated string dictionary       = 15 [(gogoproto.nullable) = false];
+	optional uint32 status           = 16 [(gogoproto.nullable) = false];
+	optional uint32 memory_footprint = 17 [(gogoproto.nullable) = false]; // allow nullable maybe?
+	repeated Request requests        = 18 [(gogoproto.nullable) = false]; // allow nullable maybe?
+	optional string schema           = 19 [(gogoproto.nullable) = false]; // allow nullable maybe?
+	repeated uint32 tag_name         = 20 [(gogoproto.nullable) = false];
+	repeated uint32 tag_value        = 21 [(gogoproto.nullable) = false];
+}

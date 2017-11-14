@@ -5,33 +5,73 @@ import (
 	"badoo/_packages/service"
 	"badoo/_packages/service/config"
 	"github.com/badoo/lsd/internal/client"
+	"github.com/badoo/lsd/internal/client/health"
 	"github.com/badoo/lsd/internal/server"
-	"github.com/badoo/lsd/proto"
+	"github.com/badoo/lsd/internal/server/hdfs"
+	"github.com/badoo/lsd/internal/traffic"
+	lsdProto "github.com/badoo/lsd/proto"
+	"os"
 )
 
-type FullConfig struct {
-	badoo_config.ServiceConfig
-	lsd.LsdConfig
-}
+const COMMAND_HEALTHCHECK = "healthcheck"
+const COMMAND_TRANSFER_HDFS = "transfer-hdfs"
 
-var config = FullConfig{}
+var config = &struct {
+	badoo_config.ServiceConfig
+	lsdProto.LsdConfig
+}{}
 
 func main() {
-	var gpb = server.GpbContext{}
 
-	var ports = []service.Port{
-		service.GpbPort("lsd-gpb", &gpb, lsd.Gpbrpc),
-		service.JsonPort("lsd-gpb/json", &gpb, lsd.Gpbrpc),
+	maybeRunSubCommand()
+
+	// exporting traffic stats
+	inTrafficManager := traffic.NewManager("in")
+	outTrafficManager := traffic.NewManager("out")
+
+	service.Initialize("conf/lsd.conf", config)
+	handler, err := server.NewHandler(config.ServerConfig, inTrafficManager)
+	if err != nil {
+		log.Fatalf("failed to create handler for lsd server: %v", err)
+	}
+	defer handler.Shutdown() // graceful shutdown for currently running stuff
+
+	if config.ClientConfig != nil {
+		cl, err := client.NewClient(config.ClientConfig, outTrafficManager)
+		if err != nil {
+			log.Fatalf("failed to create lsd client: %v", err)
+		}
+		cl.Start()
+		defer cl.Stop()
+	}
+	service.EventLoop([]service.Port{
+		service.GpbPort("lsd-gpb", handler, lsdProto.Gpbrpc),
+		service.JsonPort("lsd-gpb/json", handler, lsdProto.Gpbrpc),
+	})
+}
+
+func maybeRunSubCommand() {
+
+	if len(os.Args) < 1 {
+		return
+	}
+	if os.Args[1] != COMMAND_HEALTHCHECK && os.Args[1] != COMMAND_TRANSFER_HDFS {
+		return
 	}
 
-	service.Initialize("conf/lsd.conf", &config)
+	// shift "command" argument
+	command := os.Args[1]
+	os.Args = append(os.Args[:1], os.Args[2:]...)
 
-	if config.ClientConfig == nil && config.ServerConfig == nil {
-		log.Fatalln("Incorrect config: you must define either client_config or server_config or both")
+	switch command {
+	case COMMAND_HEALTHCHECK:
+		health.Check()
+		break
+	case COMMAND_TRANSFER_HDFS:
+		hdfs.Transfer()
+		break
+	default:
+		return
 	}
-
-	server.Setup(config.ServerConfig)
-	go client.Run(config.ClientConfig)
-
-	service.EventLoop(ports)
+	os.Exit(0)
 }

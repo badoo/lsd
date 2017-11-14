@@ -20,10 +20,11 @@ enum errno {
 
 message request_new_events {
 	message event_t {
-		required string category = 1;
-		required uint64 inode = 2;
-		required uint64 offset = 3;
-		repeated string lines = 4;
+		required string category      = 1;
+		required uint64 inode         = 2;
+		required uint64 offset        = 3;
+		repeated string lines         = 4;
+		optional bool   is_compressed = 5 [default = false]; // gzip
 	}
 	repeated event_t events = 1;
 }

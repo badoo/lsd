@@ -13,10 +13,10 @@ import (
 type ConnStatus int32
 
 const (
-	ConnOK         ConnStatus = 0 /* It's okay to use this connection */
-	ConnEOF        ConnStatus = 1 /* EOF was detected up on read of the very first byte of a packet */
-	ConnIOError    ConnStatus = 2 /* IO error */
-	ConnParseError ConnStatus = 3 /* Received unacceptable data from a peer */
+	ConnOK         ConnStatus = 0 // (CAN use) It's okay to use this connection
+	ConnEOF        ConnStatus = 1 // (MUST close) EOF was detected up on read of the very first byte of a packet
+	ConnIOError    ConnStatus = 2 // (MUST close) IO error or bad binary on the network (i.e. data stream is in inconsistent state)
+	ConnParseError ConnStatus = 3 // (CAN use) Can't decode client data, but received it fine (connection can be used further)
 	// this one is unused for now
 	// ConnBufferFull ConnStatus = 4 /* Buffer for io full */
 )

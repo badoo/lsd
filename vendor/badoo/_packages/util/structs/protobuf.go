@@ -67,6 +67,11 @@ func PBCheckRequiredFields(value interface{}) (err error) {
 				return nil
 			}
 
+			// the field is not pointer (i.e. nullable proto parameter is false)
+			if v.Kind() != reflect.Ptr {
+				return nil
+			}
+
 			// field is set = all good, skip it
 			if !v.IsNil() {
 				return nil

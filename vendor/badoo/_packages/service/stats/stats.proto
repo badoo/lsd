@@ -1,0 +1,143 @@
+package badoo.service;
+
+enum request_msgid {
+	REQUEST_STATS = 1;
+	REQUEST_VERSION = 2;
+	REQUEST_MEMORY_STATS = 3;
+	REQUEST_PROC_STATS = 4;
+	REQUEST_ZLOG_NOTICE = 5;
+	REQUEST_CONFIG_JSON = 6;
+	REQUEST_RETURN_MEMORY_TO_OS = 7;
+}
+
+enum response_msgid {
+	RESPONSE_GENERIC = 1;
+	RESPONSE_STATS  = 2;
+	RESPONSE_VERSION = 3;
+	RESPONSE_MEMORY_STATS = 4;
+	RESPONSE_PROC_STATS = 5;
+	RESPONSE_CONFIG_JSON = 6;
+}
+
+enum errno {
+	ERRNO_GENERIC = 1;
+}
+
+enum allocator_type {
+	LIBC = 1;
+	JEMALLOC = 2;
+}
+
+message response_memory_stats {
+	required allocator_type type = 1;
+	required uint64 memory_used = 2;
+	message jemalloc_t {
+		optional uint64 allocated  = 1;
+		optional uint64 active     = 2;
+		optional uint64 metadata   = 3;
+		optional uint64 resident   = 4;
+		optional uint64 mapped     = 5;
+		optional uint64 retained   = 6;
+		optional string full_stats = 7;
+	}
+	optional jemalloc_t jemalloc = 3;
+}
+
+message response_proc_stats {
+	required uint64 size		= 1;
+	required uint64 resident	= 2;
+	required uint64 shared		= 3;
+	required uint64 text		= 4;
+	required uint64 data		= 5;
+}
+
+message response_generic {
+	required sint32 error_code = 1;
+	optional string error_text = 2;
+}
+
+message request_stats {
+}
+
+message request_memory_stats {
+	optional bool full = 1 [default = false];
+}
+
+message request_proc_stats {
+}
+
+message response_stats {
+	required uint32 uptime = 1;
+	message rusage {
+		required float ru_utime = 1;
+		required float ru_stime = 2;
+		optional uint64 ru_maxrss = 3;
+		optional uint64 ru_minflt = 4;
+		optional uint64 ru_majflt = 5;
+		optional uint64 ru_inblock = 6;
+		optional uint64 ru_oublock = 7;
+		optional uint64 ru_nvcsw = 8;
+		optional uint64 ru_nivcsw = 9;
+	}
+	required rusage rusage_self = 2;
+	message port_stats {
+		required string proto = 1;
+		optional string address = 2;
+		optional uint32 lq_cur = 3;
+		optional uint32 lq_max = 4;
+		optional uint64 conn_cur = 5;
+		optional uint64 conn_total = 6;
+		optional uint64 conn_aborted = 11;
+		optional uint64 requests = 7;
+		optional uint64 bytes_read = 8;
+		optional uint64 bytes_written = 9;
+		message request_stats_t {
+			required string name = 1;
+			required uint64 count = 2;
+		}
+		repeated request_stats_t request_stats = 10;
+	}
+	repeated port_stats ports = 3;
+	optional uint32 connections = 4;
+	optional uint32 init_phase_duration = 5;
+}
+
+message request_version {
+}
+
+// This message exists in misc-proto.git too. If you change something,
+// keep it in sync.
+message response_version {
+	required string version = 1;
+	optional string build_id = 2;
+	optional string auto_build_tag = 3;
+	optional string build_date = 4;
+	optional string build_host = 5;
+	optional string build_cc = 6;
+	optional string build_configure = 7;
+	optional string vcs_type = 8;
+	optional string vcs_basename = 9;
+	optional string vcs_num = 10;
+	optional string vcs_date = 11;
+	optional string vcs_branch = 12;
+	optional string vcs_tag = 13;
+	optional string vcs_tick = 14;
+	optional string vcs_full_hash = 15;
+	optional string vcs_short_hash = 16;
+	optional string vcs_wc_modified = 17;
+	optional string maintainer = 18;
+}
+
+message request_zlog_notice {
+	required string text = 1;
+}
+
+message request_config_json {
+}
+
+message response_config_json {
+	required string json = 1;
+}
+
+message request_return_memory_to_os {
+}

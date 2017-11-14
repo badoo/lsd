@@ -144,12 +144,15 @@ type RequestNewEventsEventT struct {
 	Inode            *uint64  `protobuf:"varint,2,req,name=inode" json:"inode,omitempty"`
 	Offset           *uint64  `protobuf:"varint,3,req,name=offset" json:"offset,omitempty"`
 	Lines            []string `protobuf:"bytes,4,rep,name=lines" json:"lines,omitempty"`
+	IsCompressed     *bool    `protobuf:"varint,5,opt,name=is_compressed,def=0" json:"is_compressed,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *RequestNewEventsEventT) Reset()         { *m = RequestNewEventsEventT{} }
 func (m *RequestNewEventsEventT) String() string { return proto.CompactTextString(m) }
 func (*RequestNewEventsEventT) ProtoMessage()    {}
+
+const Default_RequestNewEventsEventT_IsCompressed bool = false
 
 func (m *RequestNewEventsEventT) GetCategory() string {
 	if m != nil && m.Category != nil {
@@ -177,6 +180,13 @@ func (m *RequestNewEventsEventT) GetLines() []string {
 		return m.Lines
 	}
 	return nil
+}
+
+func (m *RequestNewEventsEventT) GetIsCompressed() bool {
+	if m != nil && m.IsCompressed != nil {
+		return *m.IsCompressed
+	}
+	return Default_RequestNewEventsEventT_IsCompressed
 }
 
 type ResponseOffsets struct {
@@ -281,6 +291,9 @@ func (m *RequestNewEventsEventT) Size() (n int) {
 			l = len(s)
 			n += 1 + l + sovLsd(uint64(l))
 		}
+	}
+	if m.IsCompressed != nil {
+		n += 2
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -431,6 +444,16 @@ func (m *RequestNewEventsEventT) MarshalTo(data []byte) (int, error) {
 			i++
 			i += copy(data[i:], s)
 		}
+	}
+	if m.IsCompressed != nil {
+		data[i] = 0x28
+		i++
+		if *m.IsCompressed {
+			data[i] = 1
+		} else {
+			data[i] = 0
+		}
+		i++
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -781,6 +804,27 @@ func (m *RequestNewEventsEventT) Unmarshal(data []byte) error {
 			}
 			m.Lines = append(m.Lines, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsCompressed", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLsdUnsafe
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.IsCompressed = &b
 		default:
 			iNdEx = preIndex
 			skippy, err := skipLsdUnsafe(data[iNdEx:])

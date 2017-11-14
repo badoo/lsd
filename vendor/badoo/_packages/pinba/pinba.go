@@ -40,6 +40,7 @@ type Request struct {
 	Stime        float32
 	timers       []Timer
 	Status       uint32
+	Tags         map[string]string
 	lk           sync.Mutex
 }
 
@@ -56,26 +57,30 @@ func iN(haystack []string, needle string) (int, bool) {
 	return -1, false
 }
 
-func (req *GPBRequest) preallocateArrays(timers []Timer) {
+func (req *GPBRequest) preallocateArrays(timers []Timer, tags map[string]string) {
 
 	// calculate (max) final lengths for all arrays
 	nTimers := 0
 	nTags := 0
 	for _, timer := range timers {
-		nTimers += 1
+		nTimers++
 		nTags += len(timer.Tags)
 	}
 
+	nReqTags := len(tags)
+
 	// construct arrays capable of holding all possible values to reduce allocations
-	req.TimerHitCount = make([]uint32, 0, nTimers) // number of hits for each timer
-	req.TimerValue = make([]float32, 0, nTimers)   // timer value for each timer
-	req.Dictionary = make([]string, 0, nTags)      // all strings used in timer tag names/values
-	req.TimerTagCount = make([]uint32, 0, nTimers) // number of tags for each timer
-	req.TimerTagName = make([]uint32, 0, nTags)    // flat array of all tag names (as offsets into dictionary) laid out sequentially for all timers
-	req.TimerTagValue = make([]uint32, 0, nTags)   // flat array of all tag values (as offsets into dictionary) laid out sequentially for all timers
+	req.TimerHitCount = make([]uint32, 0, nTimers)     // number of hits for each timer
+	req.TimerValue = make([]float32, 0, nTimers)       // timer value for each timer
+	req.Dictionary = make([]string, 0, nTags+nReqTags) // all strings used in timer tag names/values
+	req.TimerTagCount = make([]uint32, 0, nTimers)     // number of tags for each timer
+	req.TimerTagName = make([]uint32, 0, nTags)        // flat array of all tag names (as offsets into dictionary) laid out sequentially for all timers
+	req.TimerTagValue = make([]uint32, 0, nTags)       // flat array of all tag values (as offsets into dictionary) laid out sequentially for all timers
+	req.TagName = make([]uint32, 0, nReqTags)
+	req.TagValue = make([]uint32, 0, nReqTags)
 }
 
-func (req *GPBRequest) mergeTags(tags map[string]string) {
+func (req *GPBRequest) mergeTimerTags(tags map[string]string) {
 
 	req.TimerTagCount = append(req.TimerTagCount, uint32(len(tags)))
 
@@ -98,6 +103,31 @@ func (req *GPBRequest) mergeTags(tags map[string]string) {
 			}
 
 			req.TimerTagValue = append(req.TimerTagValue, uint32(pos))
+		}
+	}
+}
+
+func (req *GPBRequest) mergeRequestTags(tags map[string]string) {
+
+	for k, v := range tags {
+		{
+			pos, exists := iN(req.Dictionary, k)
+			if !exists {
+				req.Dictionary = append(req.Dictionary, k)
+				pos = len(req.Dictionary) - 1
+			}
+
+			req.TagName = append(req.TagName, uint32(pos))
+		}
+
+		{
+			pos, exists := iN(req.Dictionary, v)
+			if !exists {
+				req.Dictionary = append(req.Dictionary, v)
+				pos = len(req.Dictionary) - 1
+			}
+
+			req.TagValue = append(req.TagValue, uint32(pos))
 		}
 	}
 }
@@ -159,43 +189,17 @@ func (pc *Client) reconnect() error {
 }
 
 // NOTE(antoxa): this function is NOT safe to use from multiple goroutines
-func (pc *Client) SendRequest(request *Request) error {
-
-	pbreq := GPBRequest{
-		Request: Pinba.Request{
-			Hostname:     request.Hostname,
-			ServerName:   request.ServerName,
-			ScriptName:   request.ScriptName,
-			RequestCount: request.RequestCount,
-			RequestTime:  float32(request.RequestTime.Seconds()),
-			DocumentSize: request.DocumentSize,
-			MemoryPeak:   request.MemoryPeak,
-			RuUtime:      request.Utime,
-			RuStime:      request.Stime,
-			Status:       request.Status,
-		},
+func (pc *Client) SendSerializedBuffer(buf []byte) error {
+	if len(buf) == 0 {
+		return nil
 	}
 
-	pbreq.preallocateArrays(request.timers)
-
-	for _, timer := range request.timers {
-		pbreq.TimerHitCount = append(pbreq.TimerHitCount, 1)
-		pbreq.TimerValue = append(pbreq.TimerValue, float32(timer.duration.Seconds()))
-		pbreq.mergeTags(timer.Tags)
-	}
-
-	buf := make([]byte, pbreq.Size())
-	n, err := pbreq.MarshalTo(buf)
+	err := pc.reconnect()
 	if err != nil {
 		return err
 	}
 
-	err = pc.reconnect()
-	if err != nil {
-		return err
-	}
-
-	_, err = pc.conn.Write(buf[:n])
+	_, err = pc.conn.Write(buf)
 	if err != nil {
 		// just in case - drop the connection on write error (will reconnect next request)
 		// TODO(antoxa): maybe write to log ?
@@ -208,11 +212,60 @@ func (pc *Client) SendRequest(request *Request) error {
 	return nil
 }
 
+// NOTE(antoxa): this function is NOT safe to use from multiple goroutines
+func (pc *Client) SendRequest(request *Request) error {
+
+	buf, err := request.Serialize()
+	if err != nil {
+		return err
+	}
+
+	return pc.SendSerializedBuffer(buf)
+}
+
+// Serialize packs request to plain byte buffer, ready for sending
+// useful for flooding pinba with pre-constructed packets
+func (req *Request) Serialize() ([]byte, error) {
+	pbreq := GPBRequest{
+		Request: Pinba.Request{
+			Hostname:     req.Hostname,
+			ServerName:   req.ServerName,
+			ScriptName:   req.ScriptName,
+			RequestCount: req.RequestCount,
+			RequestTime:  float32(req.RequestTime.Seconds()),
+			DocumentSize: req.DocumentSize,
+			MemoryPeak:   req.MemoryPeak,
+			RuUtime:      req.Utime,
+			RuStime:      req.Stime,
+			Status:       req.Status,
+		},
+	}
+
+	pbreq.preallocateArrays(req.timers, req.Tags)
+
+	for _, timer := range req.timers {
+		pbreq.TimerHitCount = append(pbreq.TimerHitCount, 1)
+		pbreq.TimerValue = append(pbreq.TimerValue, float32(timer.duration.Seconds()))
+		pbreq.mergeTimerTags(timer.Tags)
+	}
+
+	pbreq.mergeRequestTags(req.Tags)
+
+	buf := make([]byte, pbreq.Size())
+	n, err := pbreq.MarshalTo(buf)
+
+	return buf[:n], err
+}
+
 func (req *Request) AddTimer(timer *Timer) {
 	req.lk.Lock()
 	defer req.lk.Unlock()
 
 	req.timers = append(req.timers, *timer)
+}
+
+func (req *Request) AddTags(tags map[string]string) {
+	req.Tags = tags
 }
 
 // this is exactly the same as AddTimer

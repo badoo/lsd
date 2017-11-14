@@ -48,11 +48,13 @@ func (m *LsdConfig) GetClientConfig() *LsdConfigClientConfigT {
 }
 
 type LsdConfigServerConfigT struct {
-	TargetDir           *string                                  `protobuf:"bytes,1,req,name=target_dir" json:"target_dir,omitempty"`
-	MaxFileSize         *uint64                                  `protobuf:"varint,2,opt,name=max_file_size,def=5000000" json:"max_file_size,omitempty"`
-	FileRotateInterval  *uint64                                  `protobuf:"varint,3,opt,name=file_rotate_interval,def=5" json:"file_rotate_interval,omitempty"`
-	PerCategorySettings []*LsdConfigServerConfigTServerSettingsT `protobuf:"bytes,4,rep,name=per_category_settings" json:"per_category_settings,omitempty"`
-	ChunkOutput         *bool                                    `protobuf:"varint,5,opt,name=chunk_output,def=1" json:"chunk_output,omitempty"`
+	// default settings that are redefined by more concrete ones (above)
+	TargetDir                  *string                                  `protobuf:"bytes,1,req,name=target_dir" json:"target_dir,omitempty"`
+	MaxFileSize                *uint64                                  `protobuf:"varint,2,opt,name=max_file_size,def=5000000" json:"max_file_size,omitempty"`
+	FileRotateInterval         *uint64                                  `protobuf:"varint,3,opt,name=file_rotate_interval,def=5" json:"file_rotate_interval,omitempty"`
+	PerCategorySettings        []*LsdConfigServerConfigTServerSettingsT `protobuf:"bytes,4,rep,name=per_category_settings" json:"per_category_settings,omitempty"`
+	ErrorSleepInterval         *uint64                                  `protobuf:"varint,5,opt,name=error_sleep_interval,def=60" json:"error_sleep_interval,omitempty"`
+	TrafficStatsRecalcInterval *uint64                                  `protobuf:"varint,6,opt,name=traffic_stats_recalc_interval,def=10" json:"traffic_stats_recalc_interval,omitempty"`
 }
 
 func (m *LsdConfigServerConfigT) Reset()         { *m = LsdConfigServerConfigT{} }
@@ -61,7 +63,8 @@ func (*LsdConfigServerConfigT) ProtoMessage()    {}
 
 const Default_LsdConfigServerConfigT_MaxFileSize uint64 = 5000000
 const Default_LsdConfigServerConfigT_FileRotateInterval uint64 = 5
-const Default_LsdConfigServerConfigT_ChunkOutput bool = true
+const Default_LsdConfigServerConfigT_ErrorSleepInterval uint64 = 60
+const Default_LsdConfigServerConfigT_TrafficStatsRecalcInterval uint64 = 10
 
 func (m *LsdConfigServerConfigT) GetTargetDir() string {
 	if m != nil && m.TargetDir != nil {
@@ -91,25 +94,34 @@ func (m *LsdConfigServerConfigT) GetPerCategorySettings() []*LsdConfigServerConf
 	return nil
 }
 
-func (m *LsdConfigServerConfigT) GetChunkOutput() bool {
-	if m != nil && m.ChunkOutput != nil {
-		return *m.ChunkOutput
+func (m *LsdConfigServerConfigT) GetErrorSleepInterval() uint64 {
+	if m != nil && m.ErrorSleepInterval != nil {
+		return *m.ErrorSleepInterval
 	}
-	return Default_LsdConfigServerConfigT_ChunkOutput
+	return Default_LsdConfigServerConfigT_ErrorSleepInterval
+}
+
+func (m *LsdConfigServerConfigT) GetTrafficStatsRecalcInterval() uint64 {
+	if m != nil && m.TrafficStatsRecalcInterval != nil {
+		return *m.TrafficStatsRecalcInterval
+	}
+	return Default_LsdConfigServerConfigT_TrafficStatsRecalcInterval
 }
 
 type LsdConfigServerConfigTServerSettingsT struct {
 	Categories         []string `protobuf:"bytes,1,rep,name=categories" json:"categories,omitempty"`
 	MaxFileSize        *uint64  `protobuf:"varint,2,opt,name=max_file_size" json:"max_file_size,omitempty"`
 	FileRotateInterval *uint64  `protobuf:"varint,3,opt,name=file_rotate_interval" json:"file_rotate_interval,omitempty"`
-	ChunkOutput        *bool    `protobuf:"varint,4,opt,name=chunk_output,def=1" json:"chunk_output,omitempty"`
+	Gzip               *bool    `protobuf:"varint,4,opt,name=gzip,def=0" json:"gzip,omitempty"`
+	GzipParallel       *uint64  `protobuf:"varint,5,opt,name=gzip_parallel,def=1" json:"gzip_parallel,omitempty"`
 }
 
 func (m *LsdConfigServerConfigTServerSettingsT) Reset()         { *m = LsdConfigServerConfigTServerSettingsT{} }
 func (m *LsdConfigServerConfigTServerSettingsT) String() string { return proto.CompactTextString(m) }
 func (*LsdConfigServerConfigTServerSettingsT) ProtoMessage()    {}
 
-const Default_LsdConfigServerConfigTServerSettingsT_ChunkOutput bool = true
+const Default_LsdConfigServerConfigTServerSettingsT_Gzip bool = false
+const Default_LsdConfigServerConfigTServerSettingsT_GzipParallel uint64 = 1
 
 func (m *LsdConfigServerConfigTServerSettingsT) GetCategories() []string {
 	if m != nil {
@@ -132,20 +144,34 @@ func (m *LsdConfigServerConfigTServerSettingsT) GetFileRotateInterval() uint64 {
 	return 0
 }
 
-func (m *LsdConfigServerConfigTServerSettingsT) GetChunkOutput() bool {
-	if m != nil && m.ChunkOutput != nil {
-		return *m.ChunkOutput
+func (m *LsdConfigServerConfigTServerSettingsT) GetGzip() bool {
+	if m != nil && m.Gzip != nil {
+		return *m.Gzip
 	}
-	return Default_LsdConfigServerConfigTServerSettingsT_ChunkOutput
+	return Default_LsdConfigServerConfigTServerSettingsT_Gzip
+}
+
+func (m *LsdConfigServerConfigTServerSettingsT) GetGzipParallel() uint64 {
+	if m != nil && m.GzipParallel != nil {
+		return *m.GzipParallel
+	}
+	return Default_LsdConfigServerConfigTServerSettingsT_GzipParallel
 }
 
 type LsdConfigClientConfigT struct {
-	SourceDir          *string                                 `protobuf:"bytes,1,req,name=source_dir" json:"source_dir,omitempty"`
-	Routing            []*LsdConfigClientConfigTRoutingConfigT `protobuf:"bytes,2,rep,name=routing" json:"routing,omitempty"`
-	MaxFileSize        *uint64                                 `protobuf:"varint,3,opt,name=max_file_size,def=1000000" json:"max_file_size,omitempty"`
-	OffsetsDb          *string                                 `protobuf:"bytes,4,req,name=offsets_db" json:"offsets_db,omitempty"`
-	UsageCheckInterval *uint64                                 `protobuf:"varint,5,opt,name=usage_check_interval,def=60" json:"usage_check_interval,omitempty"`
-	AlwaysFlock        *bool                                   `protobuf:"varint,6,opt,name=always_flock,def=0" json:"always_flock,omitempty"`
+	SourceDir                  *string                                 `protobuf:"bytes,1,req,name=source_dir" json:"source_dir,omitempty"`
+	OffsetsDb                  *string                                 `protobuf:"bytes,2,req,name=offsets_db" json:"offsets_db,omitempty"`
+	MaxFileSize                *uint64                                 `protobuf:"varint,3,opt,name=max_file_size,def=1000000" json:"max_file_size,omitempty"`
+	FileRotateInterval         *uint64                                 `protobuf:"varint,4,opt,name=file_rotate_interval,def=120" json:"file_rotate_interval,omitempty"`
+	AlwaysFlock                *bool                                   `protobuf:"varint,5,opt,name=always_flock,def=0" json:"always_flock,omitempty"`
+	Routing                    []*LsdConfigClientConfigTRoutingConfigT `protobuf:"bytes,6,rep,name=routing" json:"routing,omitempty"`
+	FileEventsBufferSize       *uint64                                 `protobuf:"varint,7,opt,name=file_events_buffer_size,def=500" json:"file_events_buffer_size,omitempty"`
+	OutBufferSize              *uint64                                 `protobuf:"varint,8,opt,name=out_buffer_size,def=50" json:"out_buffer_size,omitempty"`
+	UsageCheckInterval         *uint64                                 `protobuf:"varint,9,opt,name=usage_check_interval,def=60" json:"usage_check_interval,omitempty"`
+	OffsetsSaveInterval        *uint64                                 `protobuf:"varint,10,opt,name=offsets_save_interval,def=1" json:"offsets_save_interval,omitempty"`
+	TrafficStatsRecalcInterval *uint64                                 `protobuf:"varint,11,opt,name=traffic_stats_recalc_interval,def=10" json:"traffic_stats_recalc_interval,omitempty"`
+	BacklogFlushInterval       *uint64                                 `protobuf:"varint,12,opt,name=backlog_flush_interval,def=10" json:"backlog_flush_interval,omitempty"`
+	PeriodicScanInterval       *uint64                                 `protobuf:"varint,13,opt,name=periodic_scan_interval,def=600" json:"periodic_scan_interval,omitempty"`
 }
 
 func (m *LsdConfigClientConfigT) Reset()         { *m = LsdConfigClientConfigT{} }
@@ -153,28 +179,21 @@ func (m *LsdConfigClientConfigT) String() string { return proto.CompactTextStrin
 func (*LsdConfigClientConfigT) ProtoMessage()    {}
 
 const Default_LsdConfigClientConfigT_MaxFileSize uint64 = 1000000
-const Default_LsdConfigClientConfigT_UsageCheckInterval uint64 = 60
+const Default_LsdConfigClientConfigT_FileRotateInterval uint64 = 120
 const Default_LsdConfigClientConfigT_AlwaysFlock bool = false
+const Default_LsdConfigClientConfigT_FileEventsBufferSize uint64 = 500
+const Default_LsdConfigClientConfigT_OutBufferSize uint64 = 50
+const Default_LsdConfigClientConfigT_UsageCheckInterval uint64 = 60
+const Default_LsdConfigClientConfigT_OffsetsSaveInterval uint64 = 1
+const Default_LsdConfigClientConfigT_TrafficStatsRecalcInterval uint64 = 10
+const Default_LsdConfigClientConfigT_BacklogFlushInterval uint64 = 10
+const Default_LsdConfigClientConfigT_PeriodicScanInterval uint64 = 600
 
 func (m *LsdConfigClientConfigT) GetSourceDir() string {
 	if m != nil && m.SourceDir != nil {
 		return *m.SourceDir
 	}
 	return ""
-}
-
-func (m *LsdConfigClientConfigT) GetRouting() []*LsdConfigClientConfigTRoutingConfigT {
-	if m != nil {
-		return m.Routing
-	}
-	return nil
-}
-
-func (m *LsdConfigClientConfigT) GetMaxFileSize() uint64 {
-	if m != nil && m.MaxFileSize != nil {
-		return *m.MaxFileSize
-	}
-	return Default_LsdConfigClientConfigT_MaxFileSize
 }
 
 func (m *LsdConfigClientConfigT) GetOffsetsDb() string {
@@ -184,11 +203,18 @@ func (m *LsdConfigClientConfigT) GetOffsetsDb() string {
 	return ""
 }
 
-func (m *LsdConfigClientConfigT) GetUsageCheckInterval() uint64 {
-	if m != nil && m.UsageCheckInterval != nil {
-		return *m.UsageCheckInterval
+func (m *LsdConfigClientConfigT) GetMaxFileSize() uint64 {
+	if m != nil && m.MaxFileSize != nil {
+		return *m.MaxFileSize
 	}
-	return Default_LsdConfigClientConfigT_UsageCheckInterval
+	return Default_LsdConfigClientConfigT_MaxFileSize
+}
+
+func (m *LsdConfigClientConfigT) GetFileRotateInterval() uint64 {
+	if m != nil && m.FileRotateInterval != nil {
+		return *m.FileRotateInterval
+	}
+	return Default_LsdConfigClientConfigT_FileRotateInterval
 }
 
 func (m *LsdConfigClientConfigT) GetAlwaysFlock() bool {
@@ -198,14 +224,75 @@ func (m *LsdConfigClientConfigT) GetAlwaysFlock() bool {
 	return Default_LsdConfigClientConfigT_AlwaysFlock
 }
 
+func (m *LsdConfigClientConfigT) GetRouting() []*LsdConfigClientConfigTRoutingConfigT {
+	if m != nil {
+		return m.Routing
+	}
+	return nil
+}
+
+func (m *LsdConfigClientConfigT) GetFileEventsBufferSize() uint64 {
+	if m != nil && m.FileEventsBufferSize != nil {
+		return *m.FileEventsBufferSize
+	}
+	return Default_LsdConfigClientConfigT_FileEventsBufferSize
+}
+
+func (m *LsdConfigClientConfigT) GetOutBufferSize() uint64 {
+	if m != nil && m.OutBufferSize != nil {
+		return *m.OutBufferSize
+	}
+	return Default_LsdConfigClientConfigT_OutBufferSize
+}
+
+func (m *LsdConfigClientConfigT) GetUsageCheckInterval() uint64 {
+	if m != nil && m.UsageCheckInterval != nil {
+		return *m.UsageCheckInterval
+	}
+	return Default_LsdConfigClientConfigT_UsageCheckInterval
+}
+
+func (m *LsdConfigClientConfigT) GetOffsetsSaveInterval() uint64 {
+	if m != nil && m.OffsetsSaveInterval != nil {
+		return *m.OffsetsSaveInterval
+	}
+	return Default_LsdConfigClientConfigT_OffsetsSaveInterval
+}
+
+func (m *LsdConfigClientConfigT) GetTrafficStatsRecalcInterval() uint64 {
+	if m != nil && m.TrafficStatsRecalcInterval != nil {
+		return *m.TrafficStatsRecalcInterval
+	}
+	return Default_LsdConfigClientConfigT_TrafficStatsRecalcInterval
+}
+
+func (m *LsdConfigClientConfigT) GetBacklogFlushInterval() uint64 {
+	if m != nil && m.BacklogFlushInterval != nil {
+		return *m.BacklogFlushInterval
+	}
+	return Default_LsdConfigClientConfigT_BacklogFlushInterval
+}
+
+func (m *LsdConfigClientConfigT) GetPeriodicScanInterval() uint64 {
+	if m != nil && m.PeriodicScanInterval != nil {
+		return *m.PeriodicScanInterval
+	}
+	return Default_LsdConfigClientConfigT_PeriodicScanInterval
+}
+
 type LsdConfigClientConfigTReceiverT struct {
-	Addr   *string `protobuf:"bytes,1,req,name=addr" json:"addr,omitempty"`
-	Weight *uint64 `protobuf:"varint,2,req,name=weight" json:"weight,omitempty"`
+	Addr           *string `protobuf:"bytes,1,req,name=addr" json:"addr,omitempty"`
+	Weight         *uint64 `protobuf:"varint,2,req,name=weight" json:"weight,omitempty"`
+	ConnectTimeout *uint64 `protobuf:"varint,3,opt,name=connect_timeout,def=1" json:"connect_timeout,omitempty"`
+	RequestTimeout *uint64 `protobuf:"varint,4,opt,name=request_timeout,def=30" json:"request_timeout,omitempty"`
 }
 
 func (m *LsdConfigClientConfigTReceiverT) Reset()         { *m = LsdConfigClientConfigTReceiverT{} }
 func (m *LsdConfigClientConfigTReceiverT) String() string { return proto.CompactTextString(m) }
 func (*LsdConfigClientConfigTReceiverT) ProtoMessage()    {}
+
+const Default_LsdConfigClientConfigTReceiverT_ConnectTimeout uint64 = 1
+const Default_LsdConfigClientConfigTReceiverT_RequestTimeout uint64 = 30
 
 func (m *LsdConfigClientConfigTReceiverT) GetAddr() string {
 	if m != nil && m.Addr != nil {
@@ -221,21 +308,33 @@ func (m *LsdConfigClientConfigTReceiverT) GetWeight() uint64 {
 	return 0
 }
 
+func (m *LsdConfigClientConfigTReceiverT) GetConnectTimeout() uint64 {
+	if m != nil && m.ConnectTimeout != nil {
+		return *m.ConnectTimeout
+	}
+	return Default_LsdConfigClientConfigTReceiverT_ConnectTimeout
+}
+
+func (m *LsdConfigClientConfigTReceiverT) GetRequestTimeout() uint64 {
+	if m != nil && m.RequestTimeout != nil {
+		return *m.RequestTimeout
+	}
+	return Default_LsdConfigClientConfigTReceiverT_RequestTimeout
+}
+
 type LsdConfigClientConfigTRoutingConfigT struct {
-	Categories      []string                           `protobuf:"bytes,1,rep,name=categories" json:"categories,omitempty"`
-	Receivers       []*LsdConfigClientConfigTReceiverT `protobuf:"bytes,2,rep,name=receivers" json:"receivers,omitempty"`
-	PrefixSharding  *bool                              `protobuf:"varint,3,opt,name=prefix_sharding,def=0" json:"prefix_sharding,omitempty"`
-	CutPrefix       *bool                              `protobuf:"varint,4,opt,name=cut_prefix,def=0" json:"cut_prefix,omitempty"`
-	PrefixDelimiter *string                            `protobuf:"bytes,5,opt,name=prefix_delimiter,def=:" json:"prefix_delimiter,omitempty"`
+	Categories              []string                           `protobuf:"bytes,1,rep,name=categories" json:"categories,omitempty"`
+	Receivers               []*LsdConfigClientConfigTReceiverT `protobuf:"bytes,2,rep,name=receivers" json:"receivers,omitempty"`
+	OutBufferSizeMultiplier *uint64                            `protobuf:"varint,3,opt,name=out_buffer_size_multiplier,def=1" json:"out_buffer_size_multiplier,omitempty"`
+	Gzip                    *bool                              `protobuf:"varint,4,opt,name=gzip,def=0" json:"gzip,omitempty"`
 }
 
 func (m *LsdConfigClientConfigTRoutingConfigT) Reset()         { *m = LsdConfigClientConfigTRoutingConfigT{} }
 func (m *LsdConfigClientConfigTRoutingConfigT) String() string { return proto.CompactTextString(m) }
 func (*LsdConfigClientConfigTRoutingConfigT) ProtoMessage()    {}
 
-const Default_LsdConfigClientConfigTRoutingConfigT_PrefixSharding bool = false
-const Default_LsdConfigClientConfigTRoutingConfigT_CutPrefix bool = false
-const Default_LsdConfigClientConfigTRoutingConfigT_PrefixDelimiter string = ":"
+const Default_LsdConfigClientConfigTRoutingConfigT_OutBufferSizeMultiplier uint64 = 1
+const Default_LsdConfigClientConfigTRoutingConfigT_Gzip bool = false
 
 func (m *LsdConfigClientConfigTRoutingConfigT) GetCategories() []string {
 	if m != nil {
@@ -251,23 +350,16 @@ func (m *LsdConfigClientConfigTRoutingConfigT) GetReceivers() []*LsdConfigClient
 	return nil
 }
 
-func (m *LsdConfigClientConfigTRoutingConfigT) GetPrefixSharding() bool {
-	if m != nil && m.PrefixSharding != nil {
-		return *m.PrefixSharding
+func (m *LsdConfigClientConfigTRoutingConfigT) GetOutBufferSizeMultiplier() uint64 {
+	if m != nil && m.OutBufferSizeMultiplier != nil {
+		return *m.OutBufferSizeMultiplier
 	}
-	return Default_LsdConfigClientConfigTRoutingConfigT_PrefixSharding
+	return Default_LsdConfigClientConfigTRoutingConfigT_OutBufferSizeMultiplier
 }
 
-func (m *LsdConfigClientConfigTRoutingConfigT) GetCutPrefix() bool {
-	if m != nil && m.CutPrefix != nil {
-		return *m.CutPrefix
+func (m *LsdConfigClientConfigTRoutingConfigT) GetGzip() bool {
+	if m != nil && m.Gzip != nil {
+		return *m.Gzip
 	}
-	return Default_LsdConfigClientConfigTRoutingConfigT_CutPrefix
-}
-
-func (m *LsdConfigClientConfigTRoutingConfigT) GetPrefixDelimiter() string {
-	if m != nil && m.PrefixDelimiter != nil {
-		return *m.PrefixDelimiter
-	}
-	return Default_LsdConfigClientConfigTRoutingConfigT_PrefixDelimiter
+	return Default_LsdConfigClientConfigTRoutingConfigT_Gzip
 }

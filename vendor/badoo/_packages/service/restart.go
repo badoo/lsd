@@ -12,45 +12,47 @@ import (
 )
 
 const (
-	RESTART_ENV_VAR        = "GO_SERVICE_RESTART"
-	RESTART_PIDFILE_SUFFIX = ".tmp"
+	restartEnvVar        = "GO_SERVICE_RESTART"
+	restartPidfileSuffix = ".tmp"
 )
 
 var (
-	currentRestart *RestartContext
+	currentRestart *restartContext
 )
 
-type RestartSocket struct {
+type restartSocket struct {
 	Address string
 	Fd      uintptr
 }
 
-type RestartSockets map[string]RestartSocket
+type restartSockets map[string]restartSocket
 
-type RestartChildData struct {
+type restartChildData struct {
 	PPid            int
-	GpbrpcSockets   RestartSockets
-	HttpPProfSocket RestartSocket
+	GpbrpcSockets   restartSockets
+	HTTPPProfSocket restartSocket
 	// private, not serialized
 	files []*os.File
 }
 
-type RestartProcStatus struct {
+type restartProcStatus struct {
 	State *os.ProcessState
 	Err   error
 }
 
-type RestartContext struct {
+type restartContext struct {
 	Child         *os.Process
-	ChildWaitC    chan RestartProcStatus
+	ChildWaitC    chan restartProcStatus
 	ChildTimeoutC <-chan time.Time
-	Pidfile       *Pidfile
+	Pidfile       *PidfileCtx
 }
 
-func (rctx *RestartContext) MovePidfileBack() (err error) {
-	pidfile, err = currentRestart.Pidfile.MoveTo(pidfile.path)
-	if err != nil {
-		log.Errorf("can't move pidfile back: %v, %v", err, currentRestart.Pidfile)
+func (rctx *restartContext) MovePidfileBack() (err error) {
+	if currentRestart.Pidfile != nil { // will be == nil, when pidfile is not set in config
+		pidfile, err = currentRestart.Pidfile.MoveTo(pidfile.path)
+		if err != nil {
+			log.Errorf("can't move pidfile back: %v, %v", err, currentRestart.Pidfile)
+		}
 	}
 
 	return err
@@ -58,11 +60,11 @@ func (rctx *RestartContext) MovePidfileBack() (err error) {
 
 // ----------------------------------------------------------------------------------------------------------------------------------
 
-func RestartInprogress() bool {
+func restartInprogress() bool {
 	return currentRestart != nil
 }
 
-func RestartChildWaitChan() chan RestartProcStatus {
+func restartChildWaitChan() chan restartProcStatus {
 	if currentRestart == nil {
 		return nil
 	}
@@ -70,7 +72,7 @@ func RestartChildWaitChan() chan RestartProcStatus {
 	return currentRestart.ChildWaitC
 }
 
-func RestartChildTimeoutChan() <-chan time.Time {
+func restartChildTimeoutChan() <-chan time.Time {
 	if currentRestart == nil {
 		return nil
 	}
@@ -78,16 +80,16 @@ func RestartChildTimeoutChan() <-chan time.Time {
 	return currentRestart.ChildTimeoutC
 }
 
-func ParseRestartDataFromEnv() (*RestartChildData, error) {
-	rcd := &RestartChildData{}
-	rcd_env := os.Getenv(RESTART_ENV_VAR)
+func parseRestartDataFromEnv() (*restartChildData, error) {
+	rcd := &restartChildData{}
+	rcdEnv := os.Getenv(restartEnvVar)
 
-	if rcd_env == "" {
+	if rcdEnv == "" {
 		return nil, nil // ok, but no data is set
 	}
 
-	log.Debugf("ParseRestartDataFromEnv; %s: %s", RESTART_ENV_VAR, rcd_env)
-	if err := json.Unmarshal([]byte(rcd_env), rcd); err != nil {
+	log.Debugf("ParseRestartDataFromEnv; %s: %s", restartEnvVar, rcdEnv)
+	if err := json.Unmarshal([]byte(rcdEnv), rcd); err != nil {
 		return nil, err
 	}
 
@@ -115,16 +117,16 @@ func dupFdFromListener(l net.Listener) (*os.File, error) {
 
 // initiate graceful restart process
 //  *CAN NOT BE CALLED concurrently* as 'restart in progress' flag is not set immediately
-func InitiateRestart() error {
+func initiateRestart() error {
 
-	if RestartInprogress() {
+	if restartInprogress() {
 		return fmt.Errorf("restart already inprogress")
 	}
 
 	// XXX: tried to move gathering childData into it's own function, hard to get closing all files right with just defer :(
-	childData := &RestartChildData{
+	childData := &restartChildData{
 		PPid:          os.Getpid(),
-		GpbrpcSockets: make(RestartSockets),
+		GpbrpcSockets: make(restartSockets),
 		files:         []*os.File{},
 	}
 	defer func() { // close dup()-d files on exit (needs to be before we start populating files list, in case of any errors)
@@ -133,10 +135,10 @@ func InitiateRestart() error {
 		}
 	}()
 
-	addFd := func() func(addr string) RestartSocket {
+	addFd := func() func(addr string) restartSocket {
 		fdOffset := 3
-		return func(addr string) RestartSocket {
-			rs := RestartSocket{
+		return func(addr string) restartSocket {
+			rs := restartSocket{
 				Address: addr,
 				Fd:      uintptr(fdOffset),
 			}
@@ -145,31 +147,31 @@ func InitiateRestart() error {
 		}
 	}()
 
-	if HttpServer != nil {
-		dupFile, err := dupFdFromListener(HttpServer.Listener)
+	if httpServer != nil {
+		dupFile, err := dupFdFromListener(httpServer.Listener)
 		if err != nil {
 			return fmt.Errorf("can't export fd for http_pprof_addr, err: %v", err)
 		}
 		childData.files = append(childData.files, dupFile)
-		childData.HttpPProfSocket = addFd(HttpServer.Addr)
+		childData.HTTPPProfSocket = addFd(httpServer.Addr)
 	}
 
-	for _, server := range StartedServers {
-		dupFile, err := dupFdFromListener(server.Server.Listener)
+	for _, server := range startedServers {
+		dupFile, err := dupFdFromListener(server.server.Listener())
 		if err != nil {
-			return fmt.Errorf("can't export fd for %s, err: %v", server.Name, err)
+			return fmt.Errorf("can't export fd for %s, err: %v", server.name, err)
 		}
 
 		childData.files = append(childData.files, dupFile)
-		childData.GpbrpcSockets[server.Name] = addFd(server.Address)
+		childData.GpbrpcSockets[server.name] = addFd(server.confAddress)
 	}
 
-	var tmpPidfile *Pidfile
+	var tmpPidfile *PidfileCtx
 	var err error
 
 	// move parent's pidfile somewhere child won't start otherwise)
 	if pidfile != nil && pidfile.path != "" {
-		tmpPidfile, err = pidfile.MoveTo(pidfile.path + RESTART_PIDFILE_SUFFIX)
+		tmpPidfile, err = pidfile.MoveTo(pidfile.path + restartPidfileSuffix)
 		if err != nil {
 			return fmt.Errorf("can't move pidfile: %v", err)
 		}
@@ -197,18 +199,21 @@ func InitiateRestart() error {
 	return nil
 }
 
-func FinalizeRestartWithSuccess() {
+func finalizeRestartWithSuccess() {
 	log.Debug("restarted successfuly")
-	currentRestart.Pidfile.CloseAndRemove()
+
+	if currentRestart.Pidfile != nil {
+		currentRestart.Pidfile.CloseAndRemove()
+	}
 	currentRestart = nil
 }
 
-func FinalizeRestartWithError(proc_status RestartProcStatus) {
+func finalizeRestartWithError(procStatus restartProcStatus) {
 
-	if proc_status.Err != nil {
-		log.Errorf("couldn't collect state for child %d, %v", currentRestart.Child.Pid, proc_status.Err)
+	if procStatus.Err != nil {
+		log.Errorf("couldn't collect state for child %d, %v", currentRestart.Child.Pid, procStatus.Err)
 	}
-	log.Warnf("child %d failed to start, collected %v", currentRestart.Child.Pid, proc_status.State)
+	log.Warnf("child %d failed to start, collected %v", currentRestart.Child.Pid, procStatus.State)
 
 	// not waiting for child, so have to release
 	currentRestart.Child.Release()
@@ -217,11 +222,11 @@ func FinalizeRestartWithError(proc_status RestartProcStatus) {
 	currentRestart = nil
 }
 
-func FinalizeRestartWithTimeout() {
+func finalizeRestartWithTimeout() {
 
 	currentRestart.Child.Kill()
-	child_state, err := currentRestart.Child.Wait()
-	log.Warnf("child %d failed to start and was killed, state: %v, err: %v", currentRestart.Child.Pid, child_state, err)
+	childState, err := currentRestart.Child.Wait()
+	log.Warnf("child %d failed to start and was killed, state: %v, err: %v", currentRestart.Child.Pid, childState, err)
 
 	currentRestart.MovePidfileBack()
 	currentRestart = nil
@@ -230,18 +235,18 @@ func FinalizeRestartWithTimeout() {
 // ----------------------------------------------------------------------------------------------------------------------------------
 // helpers
 
-func restartRunChild(childData *RestartChildData) (*RestartContext, error) {
+func restartRunChild(childData *restartChildData) (*restartContext, error) {
 	if currentRestart != nil {
 		panic("can't call this function when restart is already in progress")
 	}
 
-	child_data_json, err := json.Marshal(childData)
+	childDataJSON, err := json.Marshal(childData)
 	if err != nil {
 		return nil, fmt.Errorf("can't json encode child data: %v", err)
 	}
 
-	os.Setenv(RESTART_ENV_VAR, string(child_data_json))
-	log.Debugf("%s = %s", RESTART_ENV_VAR, child_data_json)
+	os.Setenv(restartEnvVar, string(childDataJSON))
+	log.Debugf("%s = %s", restartEnvVar, childDataJSON)
 
 	// can start child now
 	child, err := forkExec(childData.files)
@@ -251,20 +256,20 @@ func restartRunChild(childData *RestartChildData) (*RestartContext, error) {
 
 	log.Debugf("started child: %d", child.Pid)
 
-	os.Setenv(RESTART_ENV_VAR, "") // reset env after child starts, just in case
+	os.Setenv(restartEnvVar, "") // reset env after child starts, just in case
 
 	// save state
-	rctx := &RestartContext{
+	rctx := &restartContext{
 		Child:         child,
-		ChildWaitC:    make(chan RestartProcStatus, 1), // needs to be buffered (in case we drop restart state before goroutine has the chance to write)
+		ChildWaitC:    make(chan restartProcStatus, 1), // needs to be buffered (in case we drop restart state before goroutine has the chance to write)
 		ChildTimeoutC: time.After(5 * time.Second),     // FIXME: make this configureable?
 	}
 
 	// start child wait goroutine, this goroutine never dies if child starts up successfuly
 	//   but it doesn't matter, since this process will exit soon in that case
-	go func(rctx *RestartContext) {
+	go func(rctx *restartContext) {
 		status, err := rctx.Child.Wait()
-		rctx.ChildWaitC <- RestartProcStatus{status, err}
+		rctx.ChildWaitC <- restartProcStatus{status, err}
 	}(rctx)
 
 	return rctx, nil
@@ -281,7 +286,7 @@ func lookPath() (argv0 string, err error) {
 	return
 }
 
-func forkExec(save_files []*os.File) (*os.Process, error) {
+func forkExec(saveFiles []*os.File) (*os.Process, error) {
 	binary, err := lookPath()
 	if err != nil {
 		return nil, err
@@ -297,7 +302,7 @@ func forkExec(save_files []*os.File) (*os.Process, error) {
 		os.Stdout,
 		os.Stderr,
 	}
-	files = append(files, save_files...)
+	files = append(files, saveFiles...)
 
 	attr := &os.ProcAttr{
 		Dir:   wd,

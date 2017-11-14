@@ -118,6 +118,9 @@ type ServiceConfigDaemonConfigT struct {
 	SyslogPort           *uint32 `protobuf:"varint,20,opt,name=syslog_port,def=10514" json:"syslog_port,omitempty"`
 	SyslogSendBufferSize *uint32 `protobuf:"varint,21,opt,name=syslog_send_buffer_size,def=0" json:"syslog_send_buffer_size,omitempty"`
 	ItopsComment         *string `protobuf:"bytes,22,opt,name=itops_comment" json:"itops_comment,omitempty"`
+	EnableDebugFeatures  *bool   `protobuf:"varint,23,opt,name=enable_debug_features,def=0" json:"enable_debug_features,omitempty"`
+	MaxParallelRequests  *uint32 `protobuf:"varint,34,opt,name=max_parallel_requests,def=100" json:"max_parallel_requests,omitempty"`
+	EnableDebugcharts    *bool   `protobuf:"varint,35,opt,name=enable_debugcharts,def=1" json:"enable_debugcharts,omitempty"`
 	XXX_unrecognized     []byte  `json:"-"`
 }
 
@@ -132,6 +135,9 @@ const Default_ServiceConfigDaemonConfigT_ResolverTimeout uint32 = 5
 const Default_ServiceConfigDaemonConfigT_SyslogIp string = "127.0.0.1"
 const Default_ServiceConfigDaemonConfigT_SyslogPort uint32 = 10514
 const Default_ServiceConfigDaemonConfigT_SyslogSendBufferSize uint32 = 0
+const Default_ServiceConfigDaemonConfigT_EnableDebugFeatures bool = false
+const Default_ServiceConfigDaemonConfigT_MaxParallelRequests uint32 = 100
+const Default_ServiceConfigDaemonConfigT_EnableDebugcharts bool = true
 
 func (m *ServiceConfigDaemonConfigT) GetListen() []*ServiceConfigDaemonConfigTListenT {
 	if m != nil {
@@ -285,6 +291,27 @@ func (m *ServiceConfigDaemonConfigT) GetItopsComment() string {
 		return *m.ItopsComment
 	}
 	return ""
+}
+
+func (m *ServiceConfigDaemonConfigT) GetEnableDebugFeatures() bool {
+	if m != nil && m.EnableDebugFeatures != nil {
+		return *m.EnableDebugFeatures
+	}
+	return Default_ServiceConfigDaemonConfigT_EnableDebugFeatures
+}
+
+func (m *ServiceConfigDaemonConfigT) GetMaxParallelRequests() uint32 {
+	if m != nil && m.MaxParallelRequests != nil {
+		return *m.MaxParallelRequests
+	}
+	return Default_ServiceConfigDaemonConfigT_MaxParallelRequests
+}
+
+func (m *ServiceConfigDaemonConfigT) GetEnableDebugcharts() bool {
+	if m != nil && m.EnableDebugcharts != nil {
+		return *m.EnableDebugcharts
+	}
+	return Default_ServiceConfigDaemonConfigT_EnableDebugcharts
 }
 
 type ServiceConfigDaemonConfigTListenT struct {

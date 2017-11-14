@@ -1,25 +1,137 @@
-# Что такое LSD?
-LSD — это демон, который разработан для замены scribe от Facebook, который сам Facebook забросил и больше не поддерживает. Демон осуществляет доставку событий произвольного формата на заданные сервера. Требований к формату сообщения два: сообщение должно оканчиваться переводом строки и не должно быть больше 1 Мб.
+# LSD
+LSD is a streaming daemon that has been developed as a replacement for facebook's [scribe](https://github.com/facebookarchive/scribe) (it has been abandoned)
 
-Минимальные требования к замене scribe, которыми мы руководствовались:
- - Надежная доставка событий — каждое отправленное событие должно быть доставлено приемникам как минимум 1 раз
- - В случае недоступности приемника, события должны буферизоваться на диск
- - Работа в качестве роутера — все события идут на набор роутеров, откуда уже доставляются конечным потребителям
- - Доставка указанных пользователем категорий на различные группы серверов (например, `debug_*` идет на `logs1.mlan`, остальное — на `scribeuds1.mlan` и `scribeuds2.mlan` по алгоритму round-robin)
- - Доставка событий на конечные сервера в файлы вида `<target_dir>/<category>/<filename>` и поддержание симлинка вида `"<category>_current` на файл, в который в данный момент идет запись
- - Open-source
- - Разделение потока событий с помощью алгоритма round-robin или по хешу от заданного идентификатора (например, шардинг по user_id)
- - Устойчивость к падению клиента, сервера, роутеров и приемников — конкретнее, события должны продолжать доставляться, даже если один из роутеров или один из консьюмеров недоступны
+# Features
+ - extremely high availability, reliability and local buffering capabilities, limited only by producer's disk storage capacity
+ - lightweight text-based data format
+ - simple configuration, deployment and support
+ - ability to create complex routing schemes for different data streams
+ - in general you don't need any specific library to send events (just write to plain files)
 
-# Сборка
+# How to install
+_ensure you have Linux or Mac OS operating system (Windows is not supported)_
+```
+go get github.com/badoo/lsd
+cd "$GOPATH/src/github.com/badoo/lsd
+make
+$GOPATH/bin/lsd -c <path_to_config>
+```
 
- 0. Убедиться, что у вас macOS или Linux
- 1. Установить go с сайта https://golang.org/
- 2. Установить LSD: `go get github.com/badoo/lsd`
+# Architecture
 
-# Конфигурация
-Конфигурация по умолчанию берется из `conf/lsd.conf`. Чтобы указать свой путь до конфига, нужно использовать ключ `-c <config_path>`. Поскольку lsd является демоном на нашем «сишном» фреймворке, его секция конфигурации для демона ничем не отличается от остальных демонов. Пример:
+![Client-Server architecture](https://badoo.github.com/assets/lsd_architecture.jpg)
 
+Producer application writes events (\n separated text lines of any format) into local files.
+
+There is a local agent, called "LSD client" running on each host.
+
+It watches these files and sends all new lines to remote receiver, called "LSD Server".
+
+All events are split into categories based on file/directory name
+
+## LSD Client
+
+LSD Client uses inotify to watch for categories's files.
+
+It also has rotate/delete mechanics to prevent superlarge/old files to appear.
+
+### File name formats and write contract
+
+```
+<lsd_dir>/<category_name>.log
+<lsd_dir>/<category_name>/*
+```
+
+All messages (lines) are considered to be less than PIPE_BUF (4k in Linux by default).
+
+It provides a guarantee of atomic writes to prevent lines split and data corruption.
+
+If you want to write lines larger than PIPE_BUF, you should use specific file names and flock(LOCK_EX) for writing.
+
+Maximum size for single line is 512k 
+
+```
+<lsd_dir>/<category_name>/*_big
+<lsd_dir>/<category_name>_big.log
+<lsd_dir>/<category_name>_big.log
+```
+
+_You should also escape line breaks if they do appear inside you data_
+
+### Rotate/delete flow
+
+To keep workdir clean and small, LSD has to periodically delete data that has already been sent and delivered.
+
+![Client rotate flow](https://badoo.github.io/lsd/assets/lsd_rotate.gif)
+
+It does rotate on maxFileSize or periodically on fileRotateInterval, specified in config
+
+Rotate algorithm:
+1) move `<lsd_dir>/somecategory.log` => `<lsd_dir>/somecategory.log.old`
+2) stream old and new files in parallel until every writer closes .old one
+3) when nobody holds .old file (writers always open only .log) and it is fully streamed, LSD can safely delete .old and go to step 1.
+
+_Keep in mind that writers have to periodically reopen current file in order to make LSD Client available to pass step 2_
+
+### Best way to write to LSD
+
+The most effective and reliable way is to write to small files, depending on current time
+```
+<lsd_dir>/<category_name>/<year><month><day><hour><minute>
+```
+for example
+```
+<lsd_dir>/<category_name>/201711031659
+<lsd_dir>/<category_name>/201711031700
+<lsd_dir>/<category_name>/201711031701
+<lsd_dir>/<category_name>/201711031702
+<lsd_dir>/<category_name>/201711031703
+...
+```
+
+We have some client libraries that implement this logic:
+- PHP
+- Go 
+- Java
+
+_But you are free to just do open() => write_line() => close() and it will work fine_
+
+## LSD Server
+
+LSD Server accepts data from multiple LSD Clients and writes it to disk in separate chunks according to size/time threshold
+
+![Server write flow](https://badoo.github.com/assets/lsd_server.gif)
+
+```
+<lsd_server_dir>/<category_name>/<category_name>-<year>-<month>-<day>_<6 digits number>
+```
+There is also a symlink that points to currently active file (which LSD Server writes to) 
+```
+<lsd_server_dir>/<category_name>/<category_name>_current
+```
+
+Example
+```
+<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000008
+<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000009
+<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000010
+<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000011
+<lsd_server_dir>/<category_name>/<category_name>_current => <lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000011
+```
+In this case consumer can process all files except one that is pointed by `_current` symlink (because LSD writes to it).
+
+When threshold comes and `_000012` file is created, LSD switches symlink to it. 
+
+We have some consumer libraries:
+- PHP
+- Go 
+- Java
+
+# Configuration
+Configuration is taken from `conf/lsd.conf` by default, but you can specify custom config with `-c <path>`
+
+## Basic daemon config
+Listen / logging / debug service parameters - self describing
 ```
 "daemon_config": {
     "listen": [
@@ -32,100 +144,290 @@ LSD — это демон, который разработан для замен
     "http_pprof_addr": "0.0.0.0:3705",
     "pid_file": "/tmp/lsd.pid",
     "log_file": "-",
-    "log_level": "NOTICE", /* для продакшен-использования не рекомендуется использовать уровень DEBUG */
+    "log_level": "NOTICE",
     "service_name": "lsd",
     "service_instance_name": "<hostname>",
 },
 ```
 
-Остальные секции будут описаны ниже. В конфигурации должна быть задача либо секция для сервера, либо для клиента, либо обе (роутинг, см. дополнительные настройки для клиента в этом случае):
+## Client config
 
-# Server config:
-«Сервером» в LSD называется сторона-приемник, которая пишет принятые события в отдельную директорию. Термин взят по аналогии со scribe.
-У сервера есть только одна обязательная опция, которая конфигурируется — директория, в которую должны приниматься все события:
-
-```
-"server_config": {
-    "target_dir": "/local/tmp/lsd-target/",
-},
-```
-
-События будут разбиты по категориям, на каждую категорию будет создано по одной директории в соответствии с её названием.
-Опциональные настройки:
- * `max_file_size` (в байтах) — регулирует максимальный размер получающихся файлов. Соблюдается нестрого, возможно создание файлов большего размера, погрешность может составлять около 1000 строк.
- * `file_rotate_interval` (в секундах) — максимальное количество секунд, которое должно пройти перед созданием нового файла. Соблюдается также нестрого — новый файл создается только при приходе первого события по прошествии указанного интервала. События должны приходить намного чаще, чем `file_rotate_interval`, чтобы эта опция работала с минимальной погрешностью.
-
-Также можно задать ключ `per_category_settings`, в котором нужно положить массив объектов, которые содержат те же поля, но ещё с указанием ключа categories, который является списком масок категорий, для которых нужно применить кастомные настройки:
-
-```
-"per_category_settings": [
-    {
-        "categories": ["foo_*", "bar_*"],
-        "max_file_size": 1000000,
-        "file_rotate_interval": 5,
-    }
-],
-```
-
-# Client config:
-«Клиентом» в LSD называется сторона-отправитель, которая доставляет события на заданные сервера. Лучше всего формат клиентской части конфига описывает соответствующая секция в proto-файле:
-
+Proto
 ```
 message client_config_t {
+
     message receiver_t {
         required string addr = 1;
         required uint64 weight = 2;
+        optional uint64 connect_timeout = 3 [default = 1];
+        optional uint64 request_timeout = 4 [default = 30];
     };
- 
+
     message routing_config_t {
-        repeated string categories = 1; // category masks list (only "*" is supported as mask)
+        repeated string categories = 1;                               // category masks list (only "*" is supported as mask)
         repeated receiver_t receivers = 2;
-        optional bool prefix_sharding = 3 [default = false];
-    }
- 
-    required string source_dir = 1;
-    repeated routing_config_t routing = 2;
-    optional uint64 max_file_size = 3 [default = 1000000]; // max file size for plain files before rotation
-    required string offsets_db = 4;
-    optional uint64 usage_check_interval = 5 [default = 60]; // file usage check interval in seconds
-    optional bool always_flock = 6 [default = false]; // always flock files, required for re-streaming
+        optional uint64 out_buffer_size_multiplier = 3 [default = 1]; // we can modify basic buffer size
+        optional bool gzip = 4 [default = false];                     // gzip data sent over the network
+    };
+
+    required string source_dir           = 1;
+    required string offsets_db           = 2;                     // path to file, storing per-file streamed offsets
+    optional uint64 max_file_size        = 3 [default = 1000000]; // max file size for plain files before rotation
+    optional uint64 file_rotate_interval = 4 [default = 120];     // interval of force file rotation (for long living ones)
+    optional bool always_flock           = 5 [default = false];   // always flock files, used only for restreaming
+    repeated routing_config_t routing    = 6;
+
+    optional uint64 file_events_buffer_size = 7    [default = 500];    // buffer size for file events to each category (can be raised to smooth spikes, but will consume more memory)
+    optional uint64 out_buffer_size = 8            [default = 50];     // buffer size to send to network (can be raised to smooth spikes, but will consume more memory)
+
+    optional uint64 usage_check_interval = 9           [default = 60];    // file usage check in seconds (after rotate, before clean)
+    optional uint64 offsets_save_interval = 10         [default = 1];     // save offsets db to disk in seconds
+    optional uint64 traffic_stats_recalc_interval = 11 [default = 10];    // update traffic stats in seconds
+    optional uint64 backlog_flush_interval = 12        [default = 10];    // flush of postponed events (due to overload) in seconds
+    optional uint64 periodic_scan_interval = 13        [default = 600];   // full rescan to pick up orphan events and force consistency in seconds
 };
 ```
-
-## Поле source_dir:
-Директория, из которой берутся события для последующей отправки.
-
-Имя файла должно быть в одном из следующих форматов:
-
- 1. `<category>`, `<category>.log`, `<category>/anything` — запись в такие файлы должна осуществляться атомарно, то есть `O_APPEND` + блоки размером не более `PIPE_BUF` (4 Кб в линуксе)
- 2. `<category>_big`, `<category>_big.log`, `<category>/anything_big`, `<category>/anything_big.log` — если у файла есть суффикс `_big`, то на время чтения из файла берется `LOCK_SH`, соответственно запись в такие файлы должны идти тоже с `O_APPEND` + `flock(LOCK_EX)`
-
-Имя категории получается либо из имени директории, либо из имени файла, если файл находится прямо в `source_dir` вместо нахождения в собственной поддиректории.
-
-Удалением и ротацией доставленных файлов занимается сам LSD, никаких дополнительных скриптов не требуется. Перед ротацией LSD добавляет к имени файла суффикс `.old`, поэтому не нужно самим писать в файлы с таким суффиксом. Если файл все ещё открыт на запись хотя бы одним из процессов, то файл не будет удален и события не потеряются.
-
-## Остальные поля:
- * `max_file_size` (в байтах) — максимальный размер файла перед его ротацией (используется в случае, если запись происходит в файл вида `category.log` или `category_big.log`
- * `offsets_db` — путь до файла со смещениями прочитанных файлов (например, `/tmp/lsd-offsets.db`). Важно, чтобы этот файл находится не на том же разделе, куда происходит запись файлов с событиями, иначе демон запаникует, когда на соответствующем разделе закончится место — в этом случае паника обязательна, потому что иначе демон не сможет отслеживать, какие файлы прочитаны до каких смещений
- * `usage_check_interval` (в секундах) — интервал проверки использования файлов. Используется при удалении `.old`-файлов. Сканирование происходит путем анализа procfs, поэтому довольно затратно по CPU. Рекомендуется оставить интервал по умолчанию
- * `always_flock` — нужно ли всегда делать `flock(...)` при чтении из файлов — необходимо выставить в true в случае ре-стриминга («роутеры» в терминах scribe)
-
-## Конфиг маршрутизации (поле «routing»)
-В этом поле задается список машрутов — обязательно один маршрут по умолчанию (в котором не указан список категорий), и опционально задаются маршруты для указанных масок категорий. Пример конфигурации, в которой сообщения по умолчанию доставляются на scribeuds1 и scribeuds2, а события с префиксом `debug_*` — на logs1:
+Example
 
 ```
-"routing": [
-    {
-        "receivers": [
-            {"addr": "scribeuds1:3701", "weight": 1},
-            {"addr": "scribeuds2:3701", "weight": 1},
-        ],
-    },
-    {
-        "categories": ["debug_*"],
-        "receivers": [
-            {"addr": "logs1:3701", "weight": 1},
-        ],
-    },
-]
+"client_config": {
+    "source_dir": "/local/lsd-storage",
+    "offsets_db": "/var/lsd/lsd-offsets.db",
+    "max_file_size": 1000000,
+    "usage_check_interval": 60,
+    "routing": [
+        {
+          "receivers": [
+            {"addr": "streamdefault.local:3706", "weight": 1},
+          ],
+        },
+        {
+          "categories": ["error_log"],
+          "receivers": [
+            {"addr": "logs1.local:3706", "weight": 1},
+          ],
+        },
+        {
+          "categories": ["some_event*"],
+          "receivers": [
+            {"addr": "otherhost.domain:3706", "weight": 1},
+          ],
+        },
+    ],
+}
 ```
+
+## Server config
+
+Proto
+```
+message server_config_t {
+
+    message server_settings_t {
+        repeated string categories = 1;                 // category masks list (only "*" is supported as mask)
+        optional uint64 max_file_size = 2;              // max output file size in bytes
+        optional uint64 file_rotate_interval = 3;       // output file rotate interval in seconds
+        optional bool gzip = 4 [default = false];       // gzip data that is written to disk
+        optional uint64 gzip_parallel = 5 [default = 1];// use this only if you are 100% sure that you need parallel gzip
+    };
+    // default settings that are redefined by more concrete ones (above)
+    required string target_dir = 1;
+    optional uint64 max_file_size = 2 [default = 5000000];           // max output file size in bytes
+    optional uint64 file_rotate_interval = 3 [default = 5];          // output file rotate interval in seconds
+    repeated server_settings_t per_category_settings = 4;            // per-category settings (max_file_size and file_rotate_interval)
+    optional uint64 error_sleep_interval = 5 [default = 60];
+    optional uint64 traffic_stats_recalc_interval = 6 [default = 10];// update traffic stats in seconds
+};
+```
+Example
+```
+"server_config": {
+    "target_dir": "/local/lsd-storage-server/",
+    "max_file_size": 20000000,
+    "file_rotate_interval": 60,
+    "per_category_settings": [
+        {
+            "categories": ["error_log"],
+            "max_file_size": 1000000,
+            "file_rotate_interval": 10,
+        },
+        {
+            "categories": ["some_specific_category*"],
+            "max_file_size": 360000000,
+            "file_rotate_interval": 2
+        },
+    ],
+}
+```
+
+## Relay mode (probably you won't need it)
+
+![Relay example](https://badoo.github.com/assets/lsd_relay.jpg)
+
+If you have multiple datacenters or too much producer hosts, you may need some multiplexers (called relays)
+
+In this mode LSD works as both client and server in single daemon
+
+Relay is a "fan in" in source DC for all category's data
+Router is a "fan out" in target DC (sends to appropriate local servers)
+
+`always_flock` is required in this case
+```
+"server_config": {
+    "target_dir": "/local/lsd-storage-relay/",
+    "max_file_size": 100000000,
+    "file_rotate_interval": 60,
+},
+"client_config": {
+    "source_dir": "/local/lsd-storage-relay/",
+    "offsets_db": "/var/lsd/lsd-offsets-relay.db",
+    "max_file_size": 100000000,
+    "usage_check_interval": 60,
+    "always_flock": true,
+    "routing": [{
+        "receivers": [                  
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+            {"addr": "lsd-router1.d4:3716", "weight": 1},
+        ],
+    }],
+},
+``` 
+
+# Exploitation
+
+## Resource usage
+Both client and server have low rusage (it grows in case of gzip: true), but consume memory, proportional to number of categories streamed.
+You can reduce absolute memory usage by tuning buffer sizes in config, but with default settings in badoo's usecase it's average memory usage is less then 1gb RSS
+
+## Healthchecks
+
+You can run subcommand healthcheck to receive current LSD status
+```
+lsd healthcheck -c <path_to_config>
+```
+It returns current status of lsd daemon for given config.
+
+Example:
+```
+lsd_experiment healthcheck -c /local/lsd/etc/lsd.conf | jq '.'
+{
+  "client": {
+    "undelivered": {
+      "debug_mgalanin_cluster_priority": 0,
+      "debug_mgalanin_stop_word_complaint": 0,
+      "debug_movchinnikov_sanction_descent": 0,
+      "error_log": 0,
+      "fast_stats": 0,
+      "local_compressed_uds_json_2": 7668,
+      "local_uds_debug_gpb": 269,
+      "local_uds_gpb_hdfs_1": 0,
+      "local_uds_gpb_instant": 0,
+      "mdk": 0,
+      "spam_clustering_user_features": 0,
+      "spam_clustering_user_features_6h": 0,
+      "spam_generic": 118,
+      "spam_messages": 258,
+      "stat_events": 0
+    },
+    "errors": []
+  },
+  "server": {
+    "categories": {
+        "spam_stopword_text": {
+            "count": 1,
+            "oldest_ts": 1499350267
+        },
+        "spam_text": {
+            "count": 11,
+            "oldest_ts": 1510421666
+        },
+        "spam_timeout": {
+            "count": 26,
+            "oldest_ts": 1510421660
+        },
+        "spam_vpn_train_colle": {
+            "count": 0,
+            "oldest_ts": 0
+        }
+    },
+    "errors": []
+  }
+}
+```
+It returns two sections for client and server part of config (they can run in a single daemon)
+
+`client` contains number of undelivered bytes for each category
+
+`server` contains count of files for each category (waiting to be processed)
+
+Both sections also have array of generic errors.
+
+## HDFS transfer
+You can transfer files directly from LSD server's workdir to HDFS with specific sub command. 
+```
+lsd transfer-hdfs -dst-dir=<hdfs dst dir> -tmp-dir=<temp dir for upload> -namenode=<username>@<host>:<port> -delete=<true|false> "<category name pattern>"
+```
+Category pattern has standard "bash glob" syntax.
+
+All files from LSD server dirs will be transferred to hdfs with <current_hostname>_ prefix (to make files unique)
+
+## GZIP
+You can compress LSD traffic in two ways:
+1) between client and server
+2) from server to FS (also supports `gzip_parallel`)
+With `gzip: true` in appropriate config section
+
+# Internals
+_At most daemon's code is self documented_
+
+## Client
+
+![Client internal architecture](https://badoo.github.io/lsd/assets/lsd_client_internals.jpg)
+
+### FS router
+Listens inotify for base dir, adds watches on subdirs if they appear
+
+Extracts category/stat for each event and passes categoryEvent to specific categoryListener that is responsible for category
+
+If some category and it's listener get stuck (too many events/network issues/etc), we should not block whole fs router in order to keep other categories streamed
+
+That's why we have "backlog" - table with filenames that are postponed. Backlog is flushed into main events queue periodically   
+
+We also have background check, that periodically scans all files in order to pick-up orphan/lost and restore consistency (should not be useful often)
+
+### Category listener
+Receives events for specific category. Stores all active files and associated info inside.
+
+Reads file contents from disk and writes to network balancer's input channel
+
+Also provides rotate mechanics and deletes old rotated files (with usageChecker)  
+
+### Usage checker
+Periodically scans procfs to detect "free" files (those are no longer opened by writers)
+
+We don't use lsof because it takes too much time/resources to execute lsof for each watched file
+
+### Traffic manager
+Stores and exposes out/in traffic stats with expvar
+
+### Network router
+Just a proxy that stores all category => out network channel mappings
+
+### Balancer
+One balancer per category group in config. Stores all upstreams and balances events traffic between them.
+
+Registers all sent events and confirms all events, that are accepted by remote LSD server (updates offsetsDB).
+
+### Upstream
+Sends event batches to LSD server on specific host.
+
+## Server
+LSD server is pretty simple, it accepts event batches from network and writes them to disk. Nothing else.
+
+GPBHandler => listener => writer => FS

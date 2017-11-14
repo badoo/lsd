@@ -2,11 +2,13 @@ package service
 
 import (
 	"badoo/_packages/gpbrpc"
+	"badoo/_packages/log"
 	"badoo/_packages/service/stats"
+	"badoo/_packages/util/netutil"
+
 	"encoding/json"
 	"fmt"
-	"net"
-	"reflect"
+	"os"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -14,30 +16,21 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-type StatsCtx struct {
-}
+type statsContext struct{}
 
 var (
-	// public variable, is supposed to be set by user (for example in their package's init function)
+	// VersionInfo is a public variable. It is supposed to be set by user (for example in their package's init function)
 	// have some defaults, in case user doesn't set it at all
 	VersionInfo = badoo_service.ResponseVersion{
 		Version:    proto.String("0.0.0"),
 		Maintainer: proto.String("NO-USERNAME-SET@corp.badoo.com"),
 	}
 
-	stats_ctx = &StatsCtx{}
+	statsCtx = &statsContext{}
 )
 
-// this function extracts underlying fd from TCPListener
-//  CALLER MUST TREAT THIS FD AS READ-ONLY
-// the purpose here is to extract real non dup()'d fd for use in GetsockoptTCPInfo()
-func getRealFdFromTCPListener(l *net.TCPListener) uintptr {
-	file := reflect.ValueOf(l).Elem().FieldByName("fd").Elem()
-	return uintptr(file.FieldByName("sysfd").Int())
-}
-
 // these functions should be moved somewhere to util package? ... someday when we need it
-func Getrusage(who int) (*syscall.Rusage, error) {
+func getrusage(who int) (*syscall.Rusage, error) {
 	rusage := &syscall.Rusage{}
 	err := syscall.Getrusage(who, rusage)
 	return rusage, err
@@ -47,51 +40,51 @@ func timevalToFloat32(tv *syscall.Timeval) float32 {
 	return float32(tv.Sec) + float32(tv.Usec)/float32(1000*1000)
 }
 
-func GatherServiceStats() (*badoo_service.ResponseStats, error) {
-	ru, err := Getrusage(syscall.RUSAGE_SELF)
+func gatherServiceStats() (*badoo_service.ResponseStats, error) {
+	ru, err := getrusage(syscall.RUSAGE_SELF)
 	if nil != err {
 		return nil, fmt.Errorf("getrusage: %v", err)
 	}
 
 	// ports stats first
-	ports := make([]*badoo_service.ResponseStatsPortStats, len(StartedServers))
+	ports := make([]*badoo_service.ResponseStatsPortStats, len(startedServers))
 
 	i := 0
-	total_connections := uint32(0)
-	for _, srv := range StartedServers {
-		port_stats := &badoo_service.ResponseStatsPortStats{}
+	totalConnections := uint32(0)
+	for _, srv := range startedServers {
+		portStats := &badoo_service.ResponseStatsPortStats{}
 
-		stats := srv.Server.Stats
+		stats := srv.server.Stats()
 
 		// listen queue information
-		unacked, sacked, err := GetLqInfo(srv)
+		unacked, sacked, err := netutil.GetListenQueueInfo(srv.server.Listener())
 		if err == nil {
-			port_stats.LqCur = proto.Uint32(unacked)
-			port_stats.LqMax = proto.Uint32(sacked)
+			portStats.LqCur = proto.Uint32(unacked)
+			portStats.LqMax = proto.Uint32(sacked)
 		}
 
-		port_connections := atomic.LoadUint64(&stats.ConnCur)
-		total_connections += uint32(port_connections)
+		portConnections := atomic.LoadUint64(&stats.ConnCur)
+		totalConnections += uint32(portConnections)
 
 		// general stats
-		port_stats.Proto = proto.String(srv.Name)
-		port_stats.Address = proto.String(srv.Address)
-		port_stats.ConnCur = proto.Uint64(port_connections)
-		port_stats.ConnTotal = proto.Uint64(atomic.LoadUint64(&stats.ConnTotal))
-		port_stats.Requests = proto.Uint64(atomic.LoadUint64(&stats.Requests))
-		port_stats.BytesRead = proto.Uint64(atomic.LoadUint64(&stats.BytesRead))
-		port_stats.BytesWritten = proto.Uint64(atomic.LoadUint64(&stats.BytesWritten))
+		portStats.Proto = proto.String(srv.name)
+		portStats.Address = proto.String(srv.realAddress)
+		portStats.ConnCur = proto.Uint64(portConnections)
+		portStats.ConnTotal = proto.Uint64(atomic.LoadUint64(&stats.ConnTotal))
+		portStats.Requests = proto.Uint64(atomic.LoadUint64(&stats.Requests))
+		portStats.BytesRead = proto.Uint64(atomic.LoadUint64(&stats.BytesRead))
+		portStats.BytesWritten = proto.Uint64(atomic.LoadUint64(&stats.BytesWritten))
 
 		// per request stats
-		port_stats.RequestStats = make([]*badoo_service.ResponseStatsPortStatsRequestStatsT, 0, len(badoo_service.RequestMsgid_name))
-		for msg_id, msg_name := range srv.Server.Proto.GetRequestIdToNameMap() {
-			port_stats.RequestStats = append(port_stats.RequestStats, &badoo_service.ResponseStatsPortStatsRequestStatsT{
-				Name:  proto.String(msg_name),
-				Count: proto.Uint64(atomic.LoadUint64(&stats.RequestsIdStat[msg_id])),
+		portStats.RequestStats = make([]*badoo_service.ResponseStatsPortStatsRequestStatsT, 0, len(badoo_service.RequestMsgid_name))
+		for msgID, msgName := range srv.server.Protocol().GetRequestIdToNameMap() {
+			portStats.RequestStats = append(portStats.RequestStats, &badoo_service.ResponseStatsPortStatsRequestStatsT{
+				Name:  proto.String(msgName),
+				Count: proto.Uint64(atomic.LoadUint64(&stats.RequestsIdStat[msgID])),
 			})
 		}
 
-		ports[i] = port_stats
+		ports[i] = portStats
 		i++
 	}
 
@@ -109,15 +102,15 @@ func GatherServiceStats() (*badoo_service.ResponseStats, error) {
 			RuNivcsw:  proto.Uint64(uint64(ru.Nivcsw)),
 		},
 		Ports:             ports,
-		Connections:       proto.Uint32(total_connections),
+		Connections:       proto.Uint32(totalConnections),
 		InitPhaseDuration: proto.Uint32(uint32(GetInitPhaseDuration().Seconds())),
 	}
 
 	return r, nil
 }
 
-func (s *StatsCtx) RequestStats(rctx gpbrpc.RequestT, request *badoo_service.RequestStats) gpbrpc.ResultT {
-	stats, err := GatherServiceStats()
+func (s *statsContext) RequestStats(rctx gpbrpc.RequestT, request *badoo_service.RequestStats) gpbrpc.ResultT {
+	stats, err := gatherServiceStats()
 	if err != nil {
 		return badoo_service.Gpbrpc.ErrorGeneric(err.Error())
 	}
@@ -125,11 +118,54 @@ func (s *StatsCtx) RequestStats(rctx gpbrpc.RequestT, request *badoo_service.Req
 	return gpbrpc.Result(stats)
 }
 
-func (s *StatsCtx) RequestVersion(rctx gpbrpc.RequestT, request *badoo_service.RequestVersion) gpbrpc.ResultT {
+func (s *statsContext) RequestMemoryStats(rctx gpbrpc.RequestT, request *badoo_service.RequestMemoryStats) gpbrpc.ResultT {
+	return badoo_service.Gpbrpc.ErrorGeneric("not implemented in go-badoo")
+}
+
+func (s *statsContext) RequestReturnMemoryToOs(rctx gpbrpc.RequestT, request *badoo_service.RequestReturnMemoryToOs) gpbrpc.ResultT {
+	return badoo_service.Gpbrpc.ErrorGeneric("not implemented in go-badoo")
+}
+
+func (s *statsContext) RequestProcStats(rctx gpbrpc.RequestT, request *badoo_service.RequestProcStats) gpbrpc.ResultT {
+	pid := os.Getpid()
+	path := fmt.Sprintf("/proc/%d/statm", pid)
+
+	fp, err := os.Open(path)
+	if err != nil {
+		log.Errorf("request_proc_stats: %v", err)
+		return badoo_service.Gpbrpc.ErrorGeneric(fmt.Sprintf("failed to get %s stats", path))
+	}
+	defer fp.Close()
+
+	var size, resident, shared, text, lib, data, dt int
+	_, err = fmt.Fscanf(fp, "%d %d %d %d %d %d %d", &size, &resident, &shared, &text, &lib, &data, &dt)
+	if err != nil {
+		log.Errorf("request_proc_stats: failed to parse %s: %v", path, err)
+		return badoo_service.Gpbrpc.ErrorGeneric(fmt.Sprintf("failed to get %s stats", path))
+	}
+
+	PAGE_SIZE := os.Getpagesize()
+
+	return gpbrpc.Result(&badoo_service.ResponseProcStats{
+		Size_:    proto.Uint64(uint64(size * PAGE_SIZE)),
+		Resident: proto.Uint64(uint64(resident * PAGE_SIZE)),
+		Shared:   proto.Uint64(uint64(shared * PAGE_SIZE)),
+		Text:     proto.Uint64(uint64(text * PAGE_SIZE)),
+		Data:     proto.Uint64(uint64(data * PAGE_SIZE)),
+	})
+}
+
+func (s *statsContext) RequestVersion(rctx gpbrpc.RequestT, request *badoo_service.RequestVersion) gpbrpc.ResultT {
 	return gpbrpc.Result(&VersionInfo)
 }
 
-func (s *StatsCtx) RequestConfigJson(rctx gpbrpc.RequestT, request *badoo_service.RequestConfigJson) gpbrpc.ResultT {
+func (s *statsContext) RequestZlogNotice(rctx gpbrpc.RequestT, request *badoo_service.RequestZlogNotice) gpbrpc.ResultT {
+	log.Infof("%q", request.GetText())
+
+	return badoo_service.Gpbrpc.OK()
+}
+
+func (s *statsContext) RequestConfigJson(rctx gpbrpc.RequestT, request *badoo_service.RequestConfigJson) gpbrpc.ResultT {
 	buf, err := json.Marshal(config)
 	if err != nil {
 		return gpbrpc.Result(&badoo_service.ResponseGeneric{

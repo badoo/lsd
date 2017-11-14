@@ -24,14 +24,14 @@ func (l *httpLoggerWrapper) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-type httpServer struct {
+type httpServerT struct {
 	Addr     string
 	Listener net.Listener
 
 	server *http.Server
 }
 
-func (s *httpServer) Serve() {
+func (s *httpServerT) Serve() {
 	s.server = &http.Server{
 		Addr:           s.Addr,
 		Handler:        handlers.CompressHandler(http.DefaultServeMux),
@@ -43,12 +43,12 @@ func (s *httpServer) Serve() {
 	s.server.Serve(s.Listener)
 }
 
-func getHttpRestartSocket(rcd *RestartChildData, addr string) (*RestartSocket, *os.File) {
+func getHTTPRestartSocket(rcd *restartChildData, addr string) (*restartSocket, *os.File) {
 	if rcd == nil {
 		return nil, nil
 	}
 
-	restartSocket := rcd.HttpPProfSocket
+	restartSocket := rcd.HTTPPProfSocket
 	if restartSocket.Address == "" {
 		// parent doesn't have http_pprof_address
 		return nil, nil
@@ -65,7 +65,7 @@ func getHttpRestartSocket(rcd *RestartChildData, addr string) (*RestartSocket, *
 
 // start http/pprof and expvar server
 // FIXME: refactor graceful restart copy-paste stuff here
-func newHttpServer(config Config, rcd *RestartChildData) (*httpServer, error) {
+func newHTTPServer(config Config, rcd *restartChildData) (*httpServerT, error) {
 	var err error
 
 	daemonConfig := config.GetDaemonConfig()
@@ -75,7 +75,7 @@ func newHttpServer(config Config, rcd *RestartChildData) (*httpServer, error) {
 		return nil, nil
 	}
 
-	restartSocket, restartFile := getHttpRestartSocket(rcd, addr)
+	restartSocket, restartFile := getHTTPRestartSocket(rcd, addr)
 	defer func() {
 		if restartFile != nil {
 			restartFile.Close()
@@ -98,7 +98,7 @@ func newHttpServer(config Config, rcd *RestartChildData) (*httpServer, error) {
 		log.Infof("http_pprof_addr bound to address %s (parent fd: %d)", listener.Addr(), restartSocket.Fd)
 	}
 
-	server := &httpServer{
+	server := &httpServerT{
 		Addr:     addr,
 		Listener: listener,
 	}

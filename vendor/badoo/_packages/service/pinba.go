@@ -8,23 +8,23 @@ import (
 )
 
 var (
-	pinbaSender *PinbaSender
+	pinbaCtx *PinbaSender
 )
 
-type PinbaInfo struct {
+type pinbaInfo struct {
 	Address      string
 	ServiceName  string
 	InstanceName string
 }
 
 type PinbaSender struct {
-	*PinbaInfo
+	*pinbaInfo
 	clientPool sync.Pool
 }
 
-func NewPinbaSender(pi *PinbaInfo) *PinbaSender {
+func NewPinbaSender(pi *pinbaInfo) *PinbaSender {
 	return &PinbaSender{
-		PinbaInfo: pi,
+		pinbaInfo: pi,
 		clientPool: sync.Pool{
 			New: func() interface{} {
 				// ignoring error here, sucks
@@ -57,10 +57,10 @@ func (ps *PinbaSender) GetClient() *pinba.Client {
 }
 
 // process pinba configuration and return internal configuration
-func PinbaInfoFromConfig(config Config) (*PinbaInfo, error) {
+func PinbaInfoFromConfig(config Config) (*pinbaInfo, error) {
 	daemonConfig := config.GetDaemonConfig()
 
-	pi := &PinbaInfo{
+	pi := &pinbaInfo{
 		Address:      daemonConfig.GetPinbaAddress(),
 		ServiceName:  daemonConfig.GetServiceName(),
 		InstanceName: daemonConfig.GetServiceInstanceName(),
@@ -79,30 +79,12 @@ func PinbaInfoFromConfig(config Config) (*PinbaInfo, error) {
 	return pi, nil
 }
 
-func IsPinbaConfigured() bool {
-	return pinbaSender != nil
-}
-
-func GetPinbaSender() *PinbaSender {
-	return pinbaSender
-}
-
-// send a request to pinba
+// SendToPinba sends a request to pinba
 // will silently drop requests if pinba hs not been configured
 func SendToPinba(req *pinba.Request) error {
-	if pinbaSender == nil {
+	if pinbaCtx == nil {
 		return nil
 	}
 
-	return pinbaSender.Send(req)
-}
-
-// grab a pinba Client for your own use
-// NOTE: client is NOT safe for use from multiple goroutines
-func GetPinbaClient() *pinba.Client {
-	if pinbaSender == nil {
-		return nil
-	}
-
-	return pinbaSender.GetClient()
+	return pinbaCtx.Send(req)
 }

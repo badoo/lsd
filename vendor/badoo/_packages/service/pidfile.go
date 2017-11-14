@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-type Pidfile struct {
+type PidfileCtx struct {
 	f    *os.File
 	path string
 }
@@ -21,18 +21,22 @@ func pidfileOpenFile(path string) (*os.File, error) {
 }
 
 // PidfileTest just opens the file and closes it again, used by testconf mode only
-func PidfileTest(path string) error {
+func pidfileTest(path string) error {
 	pf, err := pidfileOpenFile(path)
 	pf.Close()
 	return err
 }
 
 // PidfileOpen opens new pidfile, locks it, truncates and writes current pid to it
-func PidfileOpen(path string) (*Pidfile, error) {
+func PidfileOpen(path string) (*PidfileCtx, error) {
 
 	pf, err := pidfileOpenFile(path)
 	if err != nil {
 		return nil, err
+	}
+
+	if pf == nil { // not opened
+		return nil, nil
 	}
 
 	defer func() {
@@ -57,13 +61,13 @@ func PidfileOpen(path string) (*Pidfile, error) {
 	}
 
 	// everything is ok
-	return &Pidfile{
+	return &PidfileCtx{
 		f:    pf,
 		path: path,
 	}, nil
 }
 
-func (p *Pidfile) Close() (err error) {
+func (p *PidfileCtx) Close() (err error) {
 	if p.f != nil {
 		err = p.f.Close()
 		p.f = nil
@@ -71,30 +75,30 @@ func (p *Pidfile) Close() (err error) {
 	return
 }
 
-func (p *Pidfile) MoveTo(new_path string) (*Pidfile, error) {
+func (p *PidfileCtx) MoveTo(newPath string) (*PidfileCtx, error) {
 	if p.f == nil {
 		return nil, fmt.Errorf("no pidfile is open")
 	}
 
-	if new_path == "" {
+	if newPath == "" {
 		return nil, fmt.Errorf("need path for new pidfile")
 	}
 
-	if err := os.Rename(p.path, new_path); err != nil {
+	if err := os.Rename(p.path, newPath); err != nil {
 		return nil, err
 	}
 
-	new_p := &Pidfile{
+	newP := &PidfileCtx{
 		f:    p.f,
-		path: new_path,
+		path: newPath,
 	}
 
 	p.f = nil
 
-	return new_p, nil
+	return newP, nil
 }
 
-func (p *Pidfile) CloseAndRemove() error {
+func (p *PidfileCtx) CloseAndRemove() error {
 	if p.f != nil {
 		p.Close() // screw error here
 		return os.Remove(p.path)

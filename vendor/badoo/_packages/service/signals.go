@@ -8,15 +8,15 @@ import (
 	"syscall"
 )
 
-// wait_for_signals tells the caller how to exit
-type ExitMethod int
+// waitForSignals tells the caller how to exit
+type exitMethod int
 
 const (
-	EXIT_IMMEDIATELY = iota
-	EXIT_GRACEFULLY
+	exitImmediately = iota
+	exitGracefully
 )
 
-func SignalName(sig os.Signal) string {
+func signalName(sig os.Signal) string {
 	switch sig {
 	case syscall.SIGABRT:
 		return "SIGABRT"
@@ -81,12 +81,16 @@ func SignalName(sig os.Signal) string {
 	}
 }
 
-func sigaction__graceful_shutdown(sig os.Signal) {
-	log.Infof("got %s, shutting down", SignalName(sig))
+func sigactionImmediateShutdown(sig os.Signal) {
+	log.Infof("got %s, exiting NOW", signalName(sig))
 }
 
-func sigaction__reopen_logs(sig os.Signal) {
-	log.Infof("got %s, reopening logfile: %s", SignalName(sig), logPath)
+func sigactionGracefulShutdown(sig os.Signal) {
+	log.Infof("got %s, shutting down gracefully", signalName(sig))
+}
+
+func sigactionReopenLogs(sig os.Signal) {
+	log.Infof("got %s, reopening logfile: %s", signalName(sig), logPath)
 
 	if err := reopenLogfile(logPath, logLevel); err != nil {
 		log.Errorf("can't reopen log file: %s", err)
@@ -95,15 +99,15 @@ func sigaction__reopen_logs(sig os.Signal) {
 	log.Infof("sigaction__reopen_logs: new log opened: %s", logPath)
 }
 
-func sigaction__graceful_restart(sig os.Signal) {
-	log.Infof("got %s, restarting gracefully", SignalName(sig))
+func sigactionGracefulRestart(sig os.Signal) {
+	log.Infof("got %s, restarting gracefully", signalName(sig))
 
-	if err := InitiateRestart(); err != nil {
+	if err := initiateRestart(); err != nil {
 		log.Errorf("can't initiate restart: %s", err)
 	}
 }
 
-func wait_for_signals() ExitMethod {
+func waitForSignals() exitMethod {
 	c := make(chan os.Signal, 5)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGINT, syscall.SIGUSR2)
 
@@ -112,40 +116,44 @@ func wait_for_signals() ExitMethod {
 		case sig := <-c:
 
 			switch sig {
-			case syscall.SIGTERM, syscall.SIGINT:
-				sigaction__graceful_shutdown(sig)
-				return EXIT_IMMEDIATELY
+			case syscall.SIGINT:
+				sigactionImmediateShutdown(sig)
+				return exitImmediately
+
+			case syscall.SIGTERM:
+				sigactionGracefulShutdown(sig)
+				return exitGracefully
 
 			case syscall.SIGUSR1:
-				if RestartInprogress() == false { // FIXME: why ingore log reopen ?
-					sigaction__reopen_logs(sig)
+				if restartInprogress() == false { // FIXME: why ingore log reopen ?
+					sigactionReopenLogs(sig)
 				} else {
-					log.Infof("service is restarting. ignoring %s", SignalName(sig))
+					log.Infof("service is restarting. ignoring %s", signalName(sig))
 				}
 
 			case syscall.SIGUSR2:
-				if RestartInprogress() == false {
-					sigaction__graceful_restart(sig)
+				if restartInprogress() == false {
+					sigactionGracefulRestart(sig)
 				} else {
-					log.Infof("service is restarting. ignoring %s", SignalName(sig))
+					log.Infof("service is restarting. ignoring %s", signalName(sig))
 				}
 
 			case syscall.SIGQUIT:
-				if RestartInprogress() == false {
+				if restartInprogress() == false {
 					// not a restart sequence, someone's just sent us SIGQUIT
-					sigaction__graceful_shutdown(sig)
-					return EXIT_IMMEDIATELY
+					sigactionGracefulShutdown(sig)
+					return exitGracefully
 				}
 
-				FinalizeRestartWithSuccess()
-				return EXIT_GRACEFULLY
+				finalizeRestartWithSuccess()
+				return exitGracefully
 			}
 
-		case wp := <-RestartChildWaitChan():
-			FinalizeRestartWithError(wp)
+		case wp := <-restartChildWaitChan():
+			finalizeRestartWithError(wp)
 
-		case <-RestartChildTimeoutChan():
-			FinalizeRestartWithTimeout()
+		case <-restartChildTimeoutChan():
+			finalizeRestartWithTimeout()
 		}
 	}
 }

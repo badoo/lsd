@@ -4,42 +4,59 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 option (gogoproto.goproto_unrecognized_all) = false;
 
 message lsd_config {
+
     message server_config_t {
+
         message server_settings_t {
-            repeated string categories = 1; // category masks list (only "*" is supported as mask)
-            optional uint64 max_file_size = 2; // max output file size in bytes
-            optional uint64 file_rotate_interval = 3; // output file rotate interval in seconds
-            optional bool   chunk_output = 4 [default = true]; // do output in chunks (scribe compatiblity)
+            repeated string categories = 1;                 // category masks list (only "*" is supported as mask)
+            optional uint64 max_file_size = 2;              // max output file size in bytes
+            optional uint64 file_rotate_interval = 3;       // output file rotate interval in seconds
+            optional bool gzip = 4 [default = false];       // gzip data that is written to disk
+            optional uint64 gzip_parallel = 5 [default = 1];// use this only if you are 100% sure that you need parallel gzip
         };
 
+        // default settings that are redefined by more concrete ones (above)
         required string target_dir = 1;
-        optional uint64 max_file_size = 2 [default = 5000000]; // max output file size in bytes
-        optional uint64 file_rotate_interval = 3 [default = 5]; // output file rotate interval in seconds
-        repeated server_settings_t per_category_settings = 4; // per-category settings (max_file_size and file_rotate_interval)
-        optional bool chunk_output = 5 [default = true]; // do output in chunks (scribe compatiblity)
+        optional uint64 max_file_size = 2 [default = 5000000];           // max output file size in bytes
+        optional uint64 file_rotate_interval = 3 [default = 5];          // output file rotate interval in seconds
+        repeated server_settings_t per_category_settings = 4;            // per-category settings (max_file_size and file_rotate_interval)
+        optional uint64 error_sleep_interval = 5 [default = 60];
+        optional uint64 traffic_stats_recalc_interval = 6 [default = 10];// update traffic stats in seconds
     };
 
     message client_config_t {
+
         message receiver_t {
             required string addr = 1;
             required uint64 weight = 2;
+            optional uint64 connect_timeout = 3 [default = 1];
+            optional uint64 request_timeout = 4 [default = 30];
         };
 
         message routing_config_t {
-            repeated string categories = 1; // category masks list (only "*" is supported as mask)
+            repeated string categories = 1;                               // category masks list (only "*" is supported as mask)
             repeated receiver_t receivers = 2;
-            optional bool prefix_sharding = 3 [default = false]; // whether or not to shard by prefix
-            optional bool cut_prefix = 4 [default = false]; // if sharding by prefix, cut the prefix or not?
-            optional string prefix_delimiter = 5 [default = ":"]; // delimiter for the prefix
+            optional uint64 out_buffer_size_multiplier = 3 [default = 1]; // we can modify basic buffer size
+            optional bool gzip = 4 [default = false];                     // gzip data sent over the network
         };
 
-        required string source_dir = 1;
-        repeated routing_config_t routing = 2;
-        optional uint64 max_file_size = 3 [default = 1000000]; // max file size for plain files before rotation
-        required string offsets_db = 4;
-        optional uint64 usage_check_interval = 5 [default = 60]; // file usage check interval in seconds
-        optional bool always_flock = 6 [default = false]; // always flock files, required for re-streaming
+        required string source_dir           = 1;
+        required string offsets_db           = 2;                     // path to file, storing per-file streamed offsets
+        optional uint64 max_file_size        = 3 [default = 1000000]; // max file size for plain files before rotation
+        optional uint64 file_rotate_interval = 4 [default = 120];     // interval of force file rotation (for long living ones)
+        optional bool always_flock           = 5 [default = false];   // always flock files, required for re-streaming
+        repeated routing_config_t routing    = 6;
+
+        optional uint64 file_events_buffer_size = 7    [default = 500];    // buffer size for file events to each category (can be raised to smooth spikes, but will consume more memory)
+        optional uint64 out_buffer_size = 8            [default = 50];
+
+        optional uint64 usage_check_interval = 9           [default = 60];    // file usage check in seconds (after rotate, before clean)
+        optional uint64 offsets_save_interval = 10         [default = 1];     // save offsets db to disk in seconds
+        optional uint64 traffic_stats_recalc_interval = 11 [default = 10];    // update traffic stats in seconds
+        optional uint64 backlog_flush_interval = 12        [default = 10];    // flush of postponed events (due to overload) in seconds
+        optional uint64 periodic_scan_interval = 13        [default = 600];   // full rescan to pick up orphan events and force consistency in seconds
     };
+
 
     optional server_config_t server_config = 1;
     optional client_config_t client_config = 2;

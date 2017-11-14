@@ -39,11 +39,11 @@ func (c *gpbsCodec) ReadRequest(p Protocol, conn net.Conn) (uint32, proto.Messag
 
 	msg := p.GetRequestMsg(msgid)
 	if msg == nil {
-		return 0, nil, readln, ConnOK, fmt.Errorf("parse error: unknown message_id: %d", msgid)
+		return 0, nil, readln, ConnParseError, fmt.Errorf("parse error: unknown message_id: %d", msgid)
 	}
 	err = proto.Unmarshal(body, msg)
 	if err != nil {
-		return 0, nil, readln, ConnOK, fmt.Errorf("parse error: message %s, error: %s", MapRequestIdToName(p, msgid), err)
+		return 0, nil, readln, ConnParseError, fmt.Errorf("parse error: message %s, error: %s", MapRequestIdToName(p, msgid), err)
 	}
 	return msgid, msg, readln, status, nil
 }
@@ -59,11 +59,11 @@ func (c *gpbsCodec) ReadResponse(p Protocol, conn net.Conn) (uint32, proto.Messa
 
 	msg := p.GetResponseMsg(msgid)
 	if msg == nil {
-		return 0, nil, ConnOK, fmt.Errorf("parse error: unknown message_id: %d", msgid)
+		return 0, nil, ConnParseError, fmt.Errorf("parse error: unknown message_id: %d", msgid)
 	}
 	err = proto.Unmarshal(body, msg)
 	if err != nil {
-		return 0, nil, ConnOK, fmt.Errorf("parse error: message %s, error: %s", MapRequestIdToName(p, msgid), err)
+		return 0, nil, ConnParseError, fmt.Errorf("parse error: message %s, error: %s", MapRequestIdToName(p, msgid), err)
 	}
 	return msgid, msg, status, nil
 }
@@ -103,11 +103,11 @@ func ReadGpbsPacket(r io.Reader) (msgId uint32, data []byte, bytesRead int, conn
 	msgid := binary.BigEndian.Uint32(header.data[4:])
 
 	if length < 4 {
-		return 0, nil, read_bytes, ConnParseError, fmt.Errorf("parse error: invalid packet length: %d", length)
+		return 0, nil, read_bytes, ConnIOError, fmt.Errorf("parse error: invalid packet length: %d", length)
 	}
 
 	if length > GPBS_MaxMessageLength {
-		return 0, nil, read_bytes, ConnParseError, fmt.Errorf("parse error: packet is too long: %d (max: %d)", length, GPBS_MaxMessageLength)
+		return 0, nil, read_bytes, ConnIOError, fmt.Errorf("parse error: packet is too long: %d (max: %d)", length, GPBS_MaxMessageLength)
 	}
 
 	// FIXME: don't need to allocate anything if body is empty (i.e. length == 4), rewrite the code around

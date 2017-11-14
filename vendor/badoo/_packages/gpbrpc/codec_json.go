@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
+	"badoo/_packages/util/structs"
 )
 
 const (
@@ -29,7 +30,7 @@ func (c *jsonCodec) ReadRequest(p Protocol, conn net.Conn) (uint32, proto.Messag
 
 	r := bytes.IndexAny(line, " ")
 	if r == -1 {
-		return 0, nil, readln, ConnOK, fmt.Errorf("parse error: need message name")
+		return 0, nil, readln, ConnParseError, fmt.Errorf("parse error: need message name")
 	}
 
 	message_name := "request_" + strings.ToLower(string(line[:r]))
@@ -37,12 +38,18 @@ func (c *jsonCodec) ReadRequest(p Protocol, conn net.Conn) (uint32, proto.Messag
 	msgid := MapRequestNameToId(p, message_name)
 	msg := p.GetRequestMsg(msgid)
 	if msg == nil {
-		return 0, nil, readln, ConnOK, fmt.Errorf("parse error: unknown message id = %d", msgid)
+		return 0, nil, readln, ConnParseError, fmt.Errorf("parse error: unknown message id = %d", msgid)
 	}
+
 	err = json.Unmarshal(line[r+1:], msg)
 	if err != nil {
-		return 0, nil, readln, ConnOK, fmt.Errorf("parse error: message %s, error: %s", message_name, err)
+		return 0, nil, readln, ConnParseError, fmt.Errorf("parse error: message %s, error: %s", message_name, err)
 	}
+
+	if err := structs.PBCheckRequiredFields(msg); err != nil {
+		return 0, nil, readln, ConnParseError, fmt.Errorf("parse error: message %s, error: %s", message_name, err)
+	}
+
 	return msgid, msg, readln, status, nil
 }
 

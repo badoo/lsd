@@ -19,14 +19,15 @@ type response struct {
 	err   error
 }
 
-// TODO(antoxa): split Client and persistentConn
-//  this will simplify many edge cases with connection closing from read loop
-//  1. numExpectedResponses needs to be updated in multiple places
-//  2. need to check both conn != nil and closed flag when reestablishing
-//  3. readLoop() now has to update not just connection, but also client, which is too broad of a scope
+type Client interface {
+	Call(req proto.Message) (uint32, proto.Message, error)
+	CallRaw(msgid uint32, body []byte) (uint32, []byte, error)
+	Address() string
+	Close()
+	CloseNoReuse()
+}
 
-type Client struct {
-	next, prev      *Client // Pcm needs this :|
+type defaultClient struct {
 	address         string
 	ips             []string
 	conn            net.Conn
@@ -46,7 +47,19 @@ type ClientCodec interface {
 	ReadResponse(Protocol, net.Conn) (uint32, proto.Message, ConnStatus, error)
 }
 
-func NewClient(address string, p Protocol, c ClientCodec, connect_timeout, request_timeout time.Duration) *Client {
+func NewClientCreate(address string, ips []string, p Protocol, c ClientCodec, connect_timeout, request_timeout time.Duration) Client {
+	log.Debugf("creating new cli for %s", address)
+	return &defaultClient{
+		address:         address,
+		ips:             ips,
+		Proto:           p,
+		Codec:           c,
+		connect_timeout: connect_timeout,
+		request_timeout: request_timeout,
+	}
+}
+
+func NewClient(address string, p Protocol, c ClientCodec, connect_timeout, request_timeout time.Duration) Client {
 	ips, err := dns.LookupHostPort(address)
 	if err != nil {
 		log.Errorf("dns.LookupHostPort() faield: %v", err)
@@ -54,7 +67,7 @@ func NewClient(address string, p Protocol, c ClientCodec, connect_timeout, reque
 		//                this only works because cli.Call() uses net.Dial() which resolves the name again
 	}
 
-	canUseClient := func(client *Client) bool {
+	canUseClient := func(client *defaultClient) bool {
 		// readLoop() might be modifying this conn
 		// but don't really need to lock for ips comparison, since ips are never modified for existing client
 		client.lk.Lock()
@@ -81,27 +94,25 @@ func NewClient(address string, p Protocol, c ClientCodec, connect_timeout, reque
 			break
 		}
 
-		if !canUseClient(client) {
-			client.closeNoReuse()
+		clientTyped := client.(*defaultClient)
+
+		if !canUseClient(clientTyped) {
+			clientTyped.closeNoReuse()
 			continue
 		}
 
 		log.Debugf("reused existing client %p for %s (after %d tries)", client, address, done_tries)
-		return client
+		return clientTyped
 	}
 
-	log.Debugf("creating new cli for %s", address)
-	return &Client{
-		address:         address,
-		ips:             ips,
-		Proto:           p,
-		Codec:           c,
-		connect_timeout: connect_timeout,
-		request_timeout: request_timeout,
-	}
+	return NewClientCreate(address, ips, p, c, connect_timeout, request_timeout)
 }
 
-func (client *Client) establishConnection(network string) error {
+func (client *defaultClient) Address() string {
+	return client.address
+}
+
+func (client *defaultClient) establishConnection(network string) error {
 	client.lk.Lock()
 	defer client.lk.Unlock()
 
@@ -136,7 +147,7 @@ func (client *Client) establishConnection(network string) error {
 	return nil
 }
 
-func (client *Client) Close() {
+func (client *defaultClient) Close() {
 	// XXX: here if Close() here is called (from other goroutine only?) while there are requests being executed
 	//       then this client will be reused as normal and might still be in "ok" state
 	//       before readLoop() has the chance to kill it.
@@ -151,21 +162,25 @@ func (client *Client) Close() {
 	}
 }
 
-func (client *Client) closeNoReuse() {
+func (client *defaultClient) CloseNoReuse() {
+	client.closeNoReuse()
+}
+
+func (client *defaultClient) closeNoReuse() {
 	client.lk.Lock()
 	defer client.lk.Unlock()
 
 	client.closeNoReuseLocked()
 }
 
-func (client *Client) closeNoReuseLocked() {
+func (client *defaultClient) closeNoReuseLocked() {
 	if !client.closed {
 		client.conn.Close()
 		client.closed = true
 	}
 }
 
-func (client *Client) Call(req proto.Message) (uint32, proto.Message, error) {
+func (client *defaultClient) Call(req proto.Message) (uint32, proto.Message, error) {
 
 	body, err := proto.Marshal(req)
 	if err != nil {
@@ -191,7 +206,7 @@ func (client *Client) Call(req proto.Message) (uint32, proto.Message, error) {
 	return msgid, msg, nil
 }
 
-func (client *Client) CallRaw(msgid uint32, body []byte) (uint32, []byte, error) {
+func (client *defaultClient) CallRaw(msgid uint32, body []byte) (uint32, []byte, error) {
 	err := client.establishConnection("tcp")
 	if err != nil {
 		return 0, nil, err
@@ -214,7 +229,7 @@ func (client *Client) CallRaw(msgid uint32, body []byte) (uint32, []byte, error)
 	return resp.msgid, resp.body, resp.err
 }
 
-func (client *Client) readLoop() {
+func (client *defaultClient) readLoop() {
 	for {
 		msgid, body, len, status, err := ReadGpbsPacket(client.conn)
 
@@ -224,7 +239,7 @@ func (client *Client) readLoop() {
 		if client.numExpectedResponses == 0 {
 			if status == ConnOK {
 				log.Errorf("unexpected read: %s -> %s: msgid %d, len: %d", client.conn.RemoteAddr(), client.conn.LocalAddr(), msgid, len)
-			} else {
+			} else if status != ConnEOF {
 				log.Errorf("error on conn: %s -> %s, %v", client.conn.RemoteAddr(), client.conn.LocalAddr(), err)
 			}
 			client.closeNoReuseLocked()

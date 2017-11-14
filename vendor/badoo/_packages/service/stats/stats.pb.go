@@ -9,13 +9,19 @@ It is generated from these files:
 	stats/stats.proto
 
 It has these top-level messages:
+	ResponseMemoryStats
+	ResponseProcStats
 	ResponseGeneric
 	RequestStats
+	RequestMemoryStats
+	RequestProcStats
 	ResponseStats
 	RequestVersion
 	ResponseVersion
+	RequestZlogNotice
 	RequestConfigJson
 	ResponseConfigJson
+	RequestReturnMemoryToOs
 */
 package badoo_service
 
@@ -31,20 +37,32 @@ var _ = math.Inf
 type RequestMsgid int32
 
 const (
-	RequestMsgid_REQUEST_STATS       RequestMsgid = 1
-	RequestMsgid_REQUEST_VERSION     RequestMsgid = 2
-	RequestMsgid_REQUEST_CONFIG_JSON RequestMsgid = 6
+	RequestMsgid_REQUEST_STATS               RequestMsgid = 1
+	RequestMsgid_REQUEST_VERSION             RequestMsgid = 2
+	RequestMsgid_REQUEST_MEMORY_STATS        RequestMsgid = 3
+	RequestMsgid_REQUEST_PROC_STATS          RequestMsgid = 4
+	RequestMsgid_REQUEST_ZLOG_NOTICE         RequestMsgid = 5
+	RequestMsgid_REQUEST_CONFIG_JSON         RequestMsgid = 6
+	RequestMsgid_REQUEST_RETURN_MEMORY_TO_OS RequestMsgid = 7
 )
 
 var RequestMsgid_name = map[int32]string{
 	1: "REQUEST_STATS",
 	2: "REQUEST_VERSION",
+	3: "REQUEST_MEMORY_STATS",
+	4: "REQUEST_PROC_STATS",
+	5: "REQUEST_ZLOG_NOTICE",
 	6: "REQUEST_CONFIG_JSON",
+	7: "REQUEST_RETURN_MEMORY_TO_OS",
 }
 var RequestMsgid_value = map[string]int32{
-	"REQUEST_STATS":       1,
-	"REQUEST_VERSION":     2,
-	"REQUEST_CONFIG_JSON": 6,
+	"REQUEST_STATS":               1,
+	"REQUEST_VERSION":             2,
+	"REQUEST_MEMORY_STATS":        3,
+	"REQUEST_PROC_STATS":          4,
+	"REQUEST_ZLOG_NOTICE":         5,
+	"REQUEST_CONFIG_JSON":         6,
+	"REQUEST_RETURN_MEMORY_TO_OS": 7,
 }
 
 func (x RequestMsgid) Enum() *RequestMsgid {
@@ -67,23 +85,29 @@ func (x *RequestMsgid) UnmarshalJSON(data []byte) error {
 type ResponseMsgid int32
 
 const (
-	ResponseMsgid_RESPONSE_GENERIC     ResponseMsgid = 1
-	ResponseMsgid_RESPONSE_STATS       ResponseMsgid = 2
-	ResponseMsgid_RESPONSE_VERSION     ResponseMsgid = 3
-	ResponseMsgid_RESPONSE_CONFIG_JSON ResponseMsgid = 6
+	ResponseMsgid_RESPONSE_GENERIC      ResponseMsgid = 1
+	ResponseMsgid_RESPONSE_STATS        ResponseMsgid = 2
+	ResponseMsgid_RESPONSE_VERSION      ResponseMsgid = 3
+	ResponseMsgid_RESPONSE_MEMORY_STATS ResponseMsgid = 4
+	ResponseMsgid_RESPONSE_PROC_STATS   ResponseMsgid = 5
+	ResponseMsgid_RESPONSE_CONFIG_JSON  ResponseMsgid = 6
 )
 
 var ResponseMsgid_name = map[int32]string{
 	1: "RESPONSE_GENERIC",
 	2: "RESPONSE_STATS",
 	3: "RESPONSE_VERSION",
+	4: "RESPONSE_MEMORY_STATS",
+	5: "RESPONSE_PROC_STATS",
 	6: "RESPONSE_CONFIG_JSON",
 }
 var ResponseMsgid_value = map[string]int32{
-	"RESPONSE_GENERIC":     1,
-	"RESPONSE_STATS":       2,
-	"RESPONSE_VERSION":     3,
-	"RESPONSE_CONFIG_JSON": 6,
+	"RESPONSE_GENERIC":      1,
+	"RESPONSE_STATS":        2,
+	"RESPONSE_VERSION":      3,
+	"RESPONSE_MEMORY_STATS": 4,
+	"RESPONSE_PROC_STATS":   5,
+	"RESPONSE_CONFIG_JSON":  6,
 }
 
 func (x ResponseMsgid) Enum() *ResponseMsgid {
@@ -133,6 +157,183 @@ func (x *Errno) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type AllocatorType int32
+
+const (
+	AllocatorType_LIBC     AllocatorType = 1
+	AllocatorType_JEMALLOC AllocatorType = 2
+)
+
+var AllocatorType_name = map[int32]string{
+	1: "LIBC",
+	2: "JEMALLOC",
+}
+var AllocatorType_value = map[string]int32{
+	"LIBC":     1,
+	"JEMALLOC": 2,
+}
+
+func (x AllocatorType) Enum() *AllocatorType {
+	p := new(AllocatorType)
+	*p = x
+	return p
+}
+func (x AllocatorType) String() string {
+	return proto.EnumName(AllocatorType_name, int32(x))
+}
+func (x *AllocatorType) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(AllocatorType_value, data, "AllocatorType")
+	if err != nil {
+		return err
+	}
+	*x = AllocatorType(value)
+	return nil
+}
+
+type ResponseMemoryStats struct {
+	Type             *AllocatorType                `protobuf:"varint,1,req,name=type,enum=badoo.service.AllocatorType" json:"type,omitempty"`
+	MemoryUsed       *uint64                       `protobuf:"varint,2,req,name=memory_used" json:"memory_used,omitempty"`
+	Jemalloc         *ResponseMemoryStatsJemallocT `protobuf:"bytes,3,opt,name=jemalloc" json:"jemalloc,omitempty"`
+	XXX_unrecognized []byte                        `json:"-"`
+}
+
+func (m *ResponseMemoryStats) Reset()         { *m = ResponseMemoryStats{} }
+func (m *ResponseMemoryStats) String() string { return proto.CompactTextString(m) }
+func (*ResponseMemoryStats) ProtoMessage()    {}
+
+func (m *ResponseMemoryStats) GetType() AllocatorType {
+	if m != nil && m.Type != nil {
+		return *m.Type
+	}
+	return AllocatorType_LIBC
+}
+
+func (m *ResponseMemoryStats) GetMemoryUsed() uint64 {
+	if m != nil && m.MemoryUsed != nil {
+		return *m.MemoryUsed
+	}
+	return 0
+}
+
+func (m *ResponseMemoryStats) GetJemalloc() *ResponseMemoryStatsJemallocT {
+	if m != nil {
+		return m.Jemalloc
+	}
+	return nil
+}
+
+type ResponseMemoryStatsJemallocT struct {
+	Allocated        *uint64 `protobuf:"varint,1,opt,name=allocated" json:"allocated,omitempty"`
+	Active           *uint64 `protobuf:"varint,2,opt,name=active" json:"active,omitempty"`
+	Metadata         *uint64 `protobuf:"varint,3,opt,name=metadata" json:"metadata,omitempty"`
+	Resident         *uint64 `protobuf:"varint,4,opt,name=resident" json:"resident,omitempty"`
+	Mapped           *uint64 `protobuf:"varint,5,opt,name=mapped" json:"mapped,omitempty"`
+	Retained         *uint64 `protobuf:"varint,6,opt,name=retained" json:"retained,omitempty"`
+	FullStats        *string `protobuf:"bytes,7,opt,name=full_stats" json:"full_stats,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *ResponseMemoryStatsJemallocT) Reset()         { *m = ResponseMemoryStatsJemallocT{} }
+func (m *ResponseMemoryStatsJemallocT) String() string { return proto.CompactTextString(m) }
+func (*ResponseMemoryStatsJemallocT) ProtoMessage()    {}
+
+func (m *ResponseMemoryStatsJemallocT) GetAllocated() uint64 {
+	if m != nil && m.Allocated != nil {
+		return *m.Allocated
+	}
+	return 0
+}
+
+func (m *ResponseMemoryStatsJemallocT) GetActive() uint64 {
+	if m != nil && m.Active != nil {
+		return *m.Active
+	}
+	return 0
+}
+
+func (m *ResponseMemoryStatsJemallocT) GetMetadata() uint64 {
+	if m != nil && m.Metadata != nil {
+		return *m.Metadata
+	}
+	return 0
+}
+
+func (m *ResponseMemoryStatsJemallocT) GetResident() uint64 {
+	if m != nil && m.Resident != nil {
+		return *m.Resident
+	}
+	return 0
+}
+
+func (m *ResponseMemoryStatsJemallocT) GetMapped() uint64 {
+	if m != nil && m.Mapped != nil {
+		return *m.Mapped
+	}
+	return 0
+}
+
+func (m *ResponseMemoryStatsJemallocT) GetRetained() uint64 {
+	if m != nil && m.Retained != nil {
+		return *m.Retained
+	}
+	return 0
+}
+
+func (m *ResponseMemoryStatsJemallocT) GetFullStats() string {
+	if m != nil && m.FullStats != nil {
+		return *m.FullStats
+	}
+	return ""
+}
+
+type ResponseProcStats struct {
+	Size_            *uint64 `protobuf:"varint,1,req,name=size" json:"size,omitempty"`
+	Resident         *uint64 `protobuf:"varint,2,req,name=resident" json:"resident,omitempty"`
+	Shared           *uint64 `protobuf:"varint,3,req,name=shared" json:"shared,omitempty"`
+	Text             *uint64 `protobuf:"varint,4,req,name=text" json:"text,omitempty"`
+	Data             *uint64 `protobuf:"varint,5,req,name=data" json:"data,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *ResponseProcStats) Reset()         { *m = ResponseProcStats{} }
+func (m *ResponseProcStats) String() string { return proto.CompactTextString(m) }
+func (*ResponseProcStats) ProtoMessage()    {}
+
+func (m *ResponseProcStats) GetSize_() uint64 {
+	if m != nil && m.Size_ != nil {
+		return *m.Size_
+	}
+	return 0
+}
+
+func (m *ResponseProcStats) GetResident() uint64 {
+	if m != nil && m.Resident != nil {
+		return *m.Resident
+	}
+	return 0
+}
+
+func (m *ResponseProcStats) GetShared() uint64 {
+	if m != nil && m.Shared != nil {
+		return *m.Shared
+	}
+	return 0
+}
+
+func (m *ResponseProcStats) GetText() uint64 {
+	if m != nil && m.Text != nil {
+		return *m.Text
+	}
+	return 0
+}
+
+func (m *ResponseProcStats) GetData() uint64 {
+	if m != nil && m.Data != nil {
+		return *m.Data
+	}
+	return 0
+}
+
 type ResponseGeneric struct {
 	ErrorCode        *int32  `protobuf:"zigzag32,1,req,name=error_code" json:"error_code,omitempty"`
 	ErrorText        *string `protobuf:"bytes,2,opt,name=error_text" json:"error_text,omitempty"`
@@ -164,6 +365,32 @@ type RequestStats struct {
 func (m *RequestStats) Reset()         { *m = RequestStats{} }
 func (m *RequestStats) String() string { return proto.CompactTextString(m) }
 func (*RequestStats) ProtoMessage()    {}
+
+type RequestMemoryStats struct {
+	Full             *bool  `protobuf:"varint,1,opt,name=full,def=0" json:"full,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *RequestMemoryStats) Reset()         { *m = RequestMemoryStats{} }
+func (m *RequestMemoryStats) String() string { return proto.CompactTextString(m) }
+func (*RequestMemoryStats) ProtoMessage()    {}
+
+const Default_RequestMemoryStats_Full bool = false
+
+func (m *RequestMemoryStats) GetFull() bool {
+	if m != nil && m.Full != nil {
+		return *m.Full
+	}
+	return Default_RequestMemoryStats_Full
+}
+
+type RequestProcStats struct {
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *RequestProcStats) Reset()         { *m = RequestProcStats{} }
+func (m *RequestProcStats) String() string { return proto.CompactTextString(m) }
+func (*RequestProcStats) ProtoMessage()    {}
 
 type ResponseStats struct {
 	Uptime            *uint32                   `protobuf:"varint,1,req,name=uptime" json:"uptime,omitempty"`
@@ -421,25 +648,27 @@ func (m *RequestVersion) Reset()         { *m = RequestVersion{} }
 func (m *RequestVersion) String() string { return proto.CompactTextString(m) }
 func (*RequestVersion) ProtoMessage()    {}
 
+// This message exists in misc-proto.git too. If you change something,
+// keep it in sync.
 type ResponseVersion struct {
 	Version          *string `protobuf:"bytes,1,req,name=version" json:"version,omitempty"`
-	Maintainer       *string `protobuf:"bytes,2,req,name=maintainer" json:"maintainer,omitempty"`
-	BuildId          *string `protobuf:"bytes,3,opt,name=build_id" json:"build_id,omitempty"`
-	AutoBuildTag     *string `protobuf:"bytes,4,opt,name=auto_build_tag" json:"auto_build_tag,omitempty"`
-	BuildDate        *string `protobuf:"bytes,5,opt,name=build_date" json:"build_date,omitempty"`
-	BuildHost        *string `protobuf:"bytes,6,opt,name=build_host" json:"build_host,omitempty"`
-	BuildGoVersion   *string `protobuf:"bytes,7,opt,name=build_go_version" json:"build_go_version,omitempty"`
-	BuildCommand     *string `protobuf:"bytes,8,opt,name=build_command" json:"build_command,omitempty"`
-	VcsType          *string `protobuf:"bytes,9,opt,name=vcs_type" json:"vcs_type,omitempty"`
-	VcsBasename      *string `protobuf:"bytes,10,opt,name=vcs_basename" json:"vcs_basename,omitempty"`
-	VcsNum           *string `protobuf:"bytes,11,opt,name=vcs_num" json:"vcs_num,omitempty"`
-	VcsDate          *string `protobuf:"bytes,12,opt,name=vcs_date" json:"vcs_date,omitempty"`
-	VcsBranch        *string `protobuf:"bytes,13,opt,name=vcs_branch" json:"vcs_branch,omitempty"`
-	VcsTag           *string `protobuf:"bytes,14,opt,name=vcs_tag" json:"vcs_tag,omitempty"`
-	VcsTick          *string `protobuf:"bytes,15,opt,name=vcs_tick" json:"vcs_tick,omitempty"`
-	VcsFullHash      *string `protobuf:"bytes,16,opt,name=vcs_full_hash" json:"vcs_full_hash,omitempty"`
-	VcsShortHash     *string `protobuf:"bytes,17,opt,name=vcs_short_hash" json:"vcs_short_hash,omitempty"`
-	VcsWcModified    *string `protobuf:"bytes,18,opt,name=vcs_wc_modified" json:"vcs_wc_modified,omitempty"`
+	BuildId          *string `protobuf:"bytes,2,opt,name=build_id" json:"build_id,omitempty"`
+	AutoBuildTag     *string `protobuf:"bytes,3,opt,name=auto_build_tag" json:"auto_build_tag,omitempty"`
+	BuildDate        *string `protobuf:"bytes,4,opt,name=build_date" json:"build_date,omitempty"`
+	BuildHost        *string `protobuf:"bytes,5,opt,name=build_host" json:"build_host,omitempty"`
+	BuildCc          *string `protobuf:"bytes,6,opt,name=build_cc" json:"build_cc,omitempty"`
+	BuildConfigure   *string `protobuf:"bytes,7,opt,name=build_configure" json:"build_configure,omitempty"`
+	VcsType          *string `protobuf:"bytes,8,opt,name=vcs_type" json:"vcs_type,omitempty"`
+	VcsBasename      *string `protobuf:"bytes,9,opt,name=vcs_basename" json:"vcs_basename,omitempty"`
+	VcsNum           *string `protobuf:"bytes,10,opt,name=vcs_num" json:"vcs_num,omitempty"`
+	VcsDate          *string `protobuf:"bytes,11,opt,name=vcs_date" json:"vcs_date,omitempty"`
+	VcsBranch        *string `protobuf:"bytes,12,opt,name=vcs_branch" json:"vcs_branch,omitempty"`
+	VcsTag           *string `protobuf:"bytes,13,opt,name=vcs_tag" json:"vcs_tag,omitempty"`
+	VcsTick          *string `protobuf:"bytes,14,opt,name=vcs_tick" json:"vcs_tick,omitempty"`
+	VcsFullHash      *string `protobuf:"bytes,15,opt,name=vcs_full_hash" json:"vcs_full_hash,omitempty"`
+	VcsShortHash     *string `protobuf:"bytes,16,opt,name=vcs_short_hash" json:"vcs_short_hash,omitempty"`
+	VcsWcModified    *string `protobuf:"bytes,17,opt,name=vcs_wc_modified" json:"vcs_wc_modified,omitempty"`
+	Maintainer       *string `protobuf:"bytes,18,opt,name=maintainer" json:"maintainer,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -450,13 +679,6 @@ func (*ResponseVersion) ProtoMessage()    {}
 func (m *ResponseVersion) GetVersion() string {
 	if m != nil && m.Version != nil {
 		return *m.Version
-	}
-	return ""
-}
-
-func (m *ResponseVersion) GetMaintainer() string {
-	if m != nil && m.Maintainer != nil {
-		return *m.Maintainer
 	}
 	return ""
 }
@@ -489,16 +711,16 @@ func (m *ResponseVersion) GetBuildHost() string {
 	return ""
 }
 
-func (m *ResponseVersion) GetBuildGoVersion() string {
-	if m != nil && m.BuildGoVersion != nil {
-		return *m.BuildGoVersion
+func (m *ResponseVersion) GetBuildCc() string {
+	if m != nil && m.BuildCc != nil {
+		return *m.BuildCc
 	}
 	return ""
 }
 
-func (m *ResponseVersion) GetBuildCommand() string {
-	if m != nil && m.BuildCommand != nil {
-		return *m.BuildCommand
+func (m *ResponseVersion) GetBuildConfigure() string {
+	if m != nil && m.BuildConfigure != nil {
+		return *m.BuildConfigure
 	}
 	return ""
 }
@@ -573,6 +795,29 @@ func (m *ResponseVersion) GetVcsWcModified() string {
 	return ""
 }
 
+func (m *ResponseVersion) GetMaintainer() string {
+	if m != nil && m.Maintainer != nil {
+		return *m.Maintainer
+	}
+	return ""
+}
+
+type RequestZlogNotice struct {
+	Text             *string `protobuf:"bytes,1,req,name=text" json:"text,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *RequestZlogNotice) Reset()         { *m = RequestZlogNotice{} }
+func (m *RequestZlogNotice) String() string { return proto.CompactTextString(m) }
+func (*RequestZlogNotice) ProtoMessage()    {}
+
+func (m *RequestZlogNotice) GetText() string {
+	if m != nil && m.Text != nil {
+		return *m.Text
+	}
+	return ""
+}
+
 type RequestConfigJson struct {
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -597,8 +842,17 @@ func (m *ResponseConfigJson) GetJson() string {
 	return ""
 }
 
+type RequestReturnMemoryToOs struct {
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *RequestReturnMemoryToOs) Reset()         { *m = RequestReturnMemoryToOs{} }
+func (m *RequestReturnMemoryToOs) String() string { return proto.CompactTextString(m) }
+func (*RequestReturnMemoryToOs) ProtoMessage()    {}
+
 func init() {
 	proto.RegisterEnum("badoo.service.RequestMsgid", RequestMsgid_name, RequestMsgid_value)
 	proto.RegisterEnum("badoo.service.ResponseMsgid", ResponseMsgid_name, ResponseMsgid_value)
 	proto.RegisterEnum("badoo.service.Errno", Errno_name, Errno_value)
+	proto.RegisterEnum("badoo.service.AllocatorType", AllocatorType_name, AllocatorType_value)
 }

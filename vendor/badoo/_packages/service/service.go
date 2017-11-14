@@ -5,6 +5,7 @@ import (
 	"badoo/_packages/log"
 	"badoo/_packages/service/config"
 	"badoo/_packages/service/stats"
+	"badoo/_packages/util/debugcharts" // see comments inside, on why we've forked
 	"badoo/_packages/util/osutil"
 	"badoo/_packages/util/structs"
 
@@ -19,7 +20,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -27,30 +27,41 @@ import (
 )
 
 // Command line flags
-type Flags struct {
-	ConfFile    string
-	LogFile     string
-	PidFile     string
-	Testconf    bool
-	Version     bool
-	FullVersion bool
-	Debug       bool
+type flagsCollection struct {
+	ConfFile     string
+	LogFile      string
+	PidFile      string
+	Mothership   string
+	InstanceName string
+	Tag          string
+	Testconf     bool
+	Version      bool
+	FullVersion  bool
+	Debug        bool
 }
 
 // Port to listen and serve requests on, stats ports added automatically
 // see GpbPort and JsonPort functions below
 type Port struct {
-	Name      string             // interface name
-	Handler   interface{}        // handler context
-	Proto     gpbrpc.Protocol    // abstract request -> fanout to request callbacks
-	Codec     gpbrpc.ServerCodec // read/write request from/to the network
-	IsStarted bool               // has the port been started by now (TODO: allow multiple startups for the same protocol)
+	Name                string             // interface name
+	ConfAddress         string             // address, as given in config
+	Handler             interface{}        // handler context
+	Proto               gpbrpc.Protocol    // abstract request -> fanout to request callbacks
+	IsStarted           bool               // has the port been started by now (TODO: allow multiple startups for the same protocol)
+	SlowRequestTime     time.Duration      // log requests that take longer than this amount of time
+	MaxParallelRequests uint               // how many parallel requests to accept (works in ports that have multiplexing only (i.e. zmq))
+	PinbaSender         gpbrpc.PinbaSender // use this object to send to pinba (can be nil)
+
+	Listen    func(net, laddr string) (net.Listener, error)    // create listener at address
+	NewServer func(net.Listener, *Port) (gpbrpc.Server, error) // create server with listener
 }
 
-type Server struct {
-	Name    string
-	Address string
-	Server  *gpbrpc.Server
+type portServer struct {
+	name        string
+	confAddress string
+	realAddress string
+	port        *Port
+	server      gpbrpc.Server
 }
 
 type Config interface {
@@ -58,7 +69,10 @@ type Config interface {
 }
 
 var (
-	flags = Flags{}
+	flags = flagsCollection{}
+
+	// full list of ports, user-defined and built-in
+	ports []Port
 
 	// our private copy of config, in case user doesn't care about the generic part (most of them don't)
 	config Config
@@ -71,26 +85,32 @@ var (
 	initPhaseDuration time.Duration // time from startupTime to entering EventLoop()
 	numCPU            int           // number of CPUs we're configured to use
 
-	// started servers: proto -> server
-	StartedServers = make(map[string]*Server)
+	// started servers: proto -> portServer
+	startedServers = make(map[string]*portServer)
 
-	HttpServer *httpServer
+	httpServer *httpServerT
 
-	pidfile *Pidfile
+	pidfile *PidfileCtx
 
-	restartData *RestartChildData
+	restartData *restartChildData
 
 	hostname string // local hostname, fully qualified
+
+	enableZmqPorts bool
 )
 
 func init() {
 	startupTime = time.Now()
 }
 
-func Initialize(default_config_path string, service_conf Config) {
-	flag.StringVar(&flags.ConfFile, "c", default_config_path, "path to config file")
+func Initialize(defaultConfigPath string, serviceConf Config) {
+	flag.StringVar(&flags.ConfFile, "c", defaultConfigPath, "path to config file")
+	flag.StringVar(&flags.ConfFile, "config", defaultConfigPath, "path to config file")
 	flag.StringVar(&flags.LogFile, "l", "", "path to log file, special value '-' means 'stdout'")
 	flag.StringVar(&flags.PidFile, "p", "", "path to pid file. if empty, pidfile will not be created")
+	flag.StringVar(&flags.Mothership, "mothership", "", "connect to mothership at this address")
+	flag.StringVar(&flags.InstanceName, "service_instance_name", "", "set instance name to this")
+	flag.StringVar(&flags.Tag, "tag", "", "set service tag")
 	flag.BoolVar(&flags.Testconf, "t", false, "test configuration and exit")
 	flag.BoolVar(&flags.Version, "v", false, "print version")
 	flag.BoolVar(&flags.FullVersion, "V", false, "print full version info")
@@ -110,7 +130,7 @@ func Initialize(default_config_path string, service_conf Config) {
 
 	var err error
 
-	config = service_conf                    // save a pointer to service's config (NOT a copy, mon!)
+	config = serviceConf                     // save a pointer to service's config (NOT a copy, mon!)
 	commandLine = strings.Join(os.Args, " ") // XXX(antoxa): couldn't think of a better way
 	hostname = getHostname()                 // get hostname early
 
@@ -133,7 +153,7 @@ func Initialize(default_config_path string, service_conf Config) {
 		if flags.ConfFile != "" {
 			return flags.ConfFile
 		}
-		return default_config_path
+		return defaultConfigPath
 	}()
 
 	// resolve absolute config path, convenient for stats
@@ -150,22 +170,22 @@ func Initialize(default_config_path string, service_conf Config) {
 
 	// parse config and construct final config merged with command line flags
 	// use path as supplied to us in args (i.e. unresolved), just to avoid 'too smart, outsmarted yourself' gotchas
-	err = ParseConfigFromFile(confPath, service_conf)
+	err = ParseConfigFromFile(confPath, serviceConf)
 	if err != nil {
-		err_message := func(err error) string {
-			switch real_err := err.(type) {
+		errMessage := func(err error) string {
+			switch realErr := err.(type) {
 			case nil:
 				return "syntax is ok"
 			case *json.SyntaxError:
-				return fmt.Sprintf("%v at offset %d", real_err, real_err.Offset)
+				return fmt.Sprintf("%v at offset %d", realErr, realErr.Offset)
 			case *os.PathError:
-				return fmt.Sprintf("%v", real_err)
+				return fmt.Sprintf("%v", realErr)
 			default:
-				return fmt.Sprintf("(%T) %v", real_err, real_err)
+				return fmt.Sprintf("(%T) %v", realErr, realErr)
 			}
 		}(err)
 
-		stderrLogger.Fatalf("Error in config: %s", err_message)
+		stderrLogger.Fatalf("Error in config: %s", errMessage)
 
 	} else {
 		if flags.Testconf {
@@ -177,13 +197,19 @@ func Initialize(default_config_path string, service_conf Config) {
 
 	daemonConfig := config.GetDaemonConfig()
 
+	// setup unix stuff
+	err = setupUnixStuff()
+	if err != nil {
+		log.Fatalf("setup unix stuff error: %v", err)
+	}
+
 	// antoxa: need the fancy wrapper function to have testconf behave properly
 	// FIXME: testconf should check more stuff (below) and graceful restart also
 	initPidfileLogfile := func() error {
 
 		// FIXME(antoxa): this testconf thingy is everywhere! must... resist... full rewrite
 		if flags.Testconf {
-			err = PidfileTest(daemonConfig.GetPidFile())
+			err = pidfileTest(daemonConfig.GetPidFile())
 		} else {
 			pidfile, err = PidfileOpen(daemonConfig.GetPidFile())
 		}
@@ -196,11 +222,11 @@ func Initialize(default_config_path string, service_conf Config) {
 		//  need better integration between logger and daemon-config
 		//  or 1-to-1 mapping
 		//  or better log package :)
-		log_level := daemonConfig.GetLogLevel()
-		if log_level == 0 {
+		logLevel := daemonConfig.GetLogLevel()
+		if logLevel == 0 {
 			return fmt.Errorf("unknown log_level, supported: %v", badoo_config.ServiceConfigDaemonConfigTLogLevels_name)
 		}
-		err = reopenLogfile(daemonConfig.GetLogFile(), log.Level(log_level))
+		err = reopenLogfile(daemonConfig.GetLogFile(), log.Level(logLevel))
 		if err != nil {
 			return fmt.Errorf("can't open logfile: %s", err)
 		}
@@ -230,9 +256,8 @@ func Initialize(default_config_path string, service_conf Config) {
 		version := func() string {
 			if vi.GetAutoBuildTag() != "" {
 				return fmt.Sprintf("%s-%s", vi.GetVersion(), vi.GetAutoBuildTag())
-			} else {
-				return vi.GetVersion()
 			}
+			return vi.GetVersion()
 		}()
 		return fmt.Sprintf("%s version %s, git %s, built %s on %s",
 			vi.GetVcsBasename(), version, vi.GetVcsShortHash(), vi.GetBuildDate(), vi.GetBuildHost())
@@ -254,8 +279,12 @@ func Initialize(default_config_path string, service_conf Config) {
 		debug.SetGCPercent(int(daemonConfig.GetGcPercent()))
 	}
 
+	if daemonConfig.GetEnableDebugcharts() {
+		debugcharts.Enable()
+	}
+
 	// process pinba configuration and related stuff
-	pinbaSender, err = func() (*PinbaSender, error) { // assigns a global
+	pinbaCtx, err = func() (*PinbaSender, error) { // assigns a global
 		if daemonConfig.GetPinbaAddress() == "" {
 			return nil, nil // user doesn't want pinba configured
 		}
@@ -274,7 +303,7 @@ func Initialize(default_config_path string, service_conf Config) {
 
 	// graceful restart handling
 	//  see restart.go and signals.go for more details
-	restartData, err = ParseRestartDataFromEnv()
+	restartData, err = parseRestartDataFromEnv()
 	if err != nil {
 		log.Fatalf("can't parse restart data: %v", err)
 	}
@@ -284,13 +313,13 @@ func Initialize(default_config_path string, service_conf Config) {
 
 	// start http pprof server (possibly - inherit fd from parent if this is a restart)
 	err = func() (err error) {
-		HttpServer, err = newHttpServer(config, restartData) // assigning a global here
+		httpServer, err = newHTTPServer(config, restartData) // assigning a global here
 		if err != nil {
 			return err
 		}
 
-		if HttpServer != nil { // nil here means it has not been configured
-			go HttpServer.Serve()
+		if httpServer != nil { // nil here means it has not been configured
+			go httpServer.Serve()
 		}
 
 		return nil
@@ -301,16 +330,16 @@ func Initialize(default_config_path string, service_conf Config) {
 }
 
 // Call this when you want to start your servers and stuff
-func EventLoop(ports []Port) {
+func EventLoop(addPorts []Port) {
 	defer log.Debug("exiting")
 
 	initPhaseDuration = time.Since(startupTime)
 
 	daemonConfig := config.GetDaemonConfig()
 
-	// service-stats ports
-	ports = append(ports, GpbPort("service-stats-gpb", stats_ctx, badoo_service.Gpbrpc))
-	ports = append(ports, JsonPort("service-stats-gpb/json", stats_ctx, badoo_service.Gpbrpc))
+	ports = append(ports, addPorts...)
+	ports = append(ports, GpbPort("service-stats-gpb", statsCtx, badoo_service.Gpbrpc))
+	ports = append(ports, JsonPort("service-stats-gpb/json", statsCtx, badoo_service.Gpbrpc))
 
 	// build map of ports and do some sanity checks
 	ph := make(map[string]*Port)
@@ -325,7 +354,7 @@ func EventLoop(ports []Port) {
 		}
 	}
 
-	getRestartSocket := func(rcd *RestartChildData, portName, portAddr string) (*RestartSocket, *os.File) {
+	getRestartSocket := func(rcd *restartChildData, portName, portAddr string) (*restartSocket, *os.File) {
 		if rcd == nil {
 			return nil, nil
 		}
@@ -358,6 +387,27 @@ func EventLoop(ports []Port) {
 			log.Warnf("ignoring double startup for port: %s at %s", portName, portAddr)
 		}
 
+		// fixup settings
+		port.ConfAddress = portAddr
+		port.SlowRequestTime = time.Duration(daemonConfig.GetSlowRequestMs()) * time.Millisecond
+		port.MaxParallelRequests = uint(daemonConfig.GetMaxParallelRequests())
+
+		// enable pinba only for ports that explicitly request it
+		port.PinbaSender = func() gpbrpc.PinbaSender {
+			if !lcf.GetPinbaEnabled() {
+				return nil // explicit nil here
+			}
+
+			if pinbaCtx == nil {
+				log.Warnf("pinba is not configured, but pinba_enabled IS set for port %s: %s", portName, portAddr)
+				return nil // explicit nil here
+			}
+
+			log.Infof("pinba configured for port %s:%s -> %s", portName, portAddr, pinbaCtx.Address)
+			return pinbaCtx
+		}()
+
+		// listeners, restart sockets
 		listener, err := func() (listener net.Listener, err error) { // it's important that this should be a function, see defer inside
 			restartSocket, restartFile := getRestartSocket(restartData, portName, portAddr)
 
@@ -366,19 +416,16 @@ func EventLoop(ports []Port) {
 			defer restartFile.Close()
 
 			if restartSocket == nil {
-				listener, err = net.Listen("tcp", portAddr)
+				listener, err = port.Listen("tcp4", portAddr)
 				if err != nil {
-					log.Errorf("listen failed for server %s at %s: %s", portName, portAddr, err)
-					return
+					return nil, fmt.Errorf("listen failed for port %s at %s: %s", portName, portAddr, err)
 				}
 				log.Infof("port %s bound to address %s", portName, listener.Addr())
 
 			} else {
-
 				listener, err = net.FileListener(restartFile) // this dup()-s
 				if err != nil {
-					log.Errorf("failed to grab parent fd %d for %s at %s: %s", restartSocket.Fd, portName, portAddr, err)
-					return
+					return nil, fmt.Errorf("failed to grab parent fd %d for %s at %s: %s", restartSocket.Fd, portName, portAddr, err)
 				}
 
 				log.Infof("port %s bound to address %s (parent fd: %d)", portName, listener.Addr(), restartSocket.Fd)
@@ -387,36 +434,65 @@ func EventLoop(ports []Port) {
 		}()
 
 		if err != nil {
-			os.Exit(1)
+			log.Fatalf("%v", err)
 		}
 
-		// enable pinba only for ports that explicitly request it
-		ps := func() gpbrpc.PinbaSender {
-			if !lcf.GetPinbaEnabled() {
-				return nil // explicit nil here
-			}
-
-			if pinbaSender == nil {
-				log.Warnf("pinba is not configured, but pinba_enabled IS set for port %s: %s", portName, portAddr)
-				return nil // explicit nil here
-			}
-
-			log.Infof("pinba configured for port %s:%s -> %s", portName, portAddr, pinbaSender.Address)
-			return pinbaSender
-		}()
-
-		// slow request log time
-		slowRequestTime := time.Duration(daemonConfig.GetSlowRequestMs()) * time.Millisecond
-
-		srv := &Server{
-			Name:    lcf.GetProto(),
-			Address: lcf.GetAddress(),
-			Server:  gpbrpc.NewServer(listener, port.Proto, port.Codec, port.Handler, ps, slowRequestTime),
+		// start server, this might fail (especially zmq can)
+		srv, err := port.NewServer(listener, port)
+		if err != nil {
+			log.Fatalf("port %s, can't start server: %v", port.Name, err)
 		}
-		go srv.Server.Serve()
+
+		psrv := &portServer{
+			name:        port.Name,
+			confAddress: port.ConfAddress,
+			realAddress: srv.Listener().Addr().String(),
+			port:        port,
+			server:      srv,
+		}
+		go psrv.server.Serve()
 
 		port.IsStarted = true
-		StartedServers[port.Name] = srv // save it for laterz
+		startedServers[port.Name] = psrv // save it for laterz
+	}
+
+	// send info to mothership
+	if flags.Mothership != "" {
+
+		sendInfoToMothership := func() error {
+			conn, err := net.Dial("tcp", flags.Mothership)
+			if err != nil {
+				return fmt.Errorf("connect: %v", err)
+			}
+
+			defer conn.Close()
+
+			sendString := func(str string) error {
+				log.Debugf("sending %q", str)
+				_, err := conn.Write([]byte(fmt.Sprintf("%s\n", str)))
+				return err
+			}
+
+			for _, psrv := range startedServers {
+				_, netPort, _ := net.SplitHostPort(psrv.realAddress)
+				err := sendString(fmt.Sprintf("%s:%s", psrv.name, netPort))
+				if err != nil {
+					return fmt.Errorf("failed to send port %s: %v", psrv.name, err)
+				}
+			}
+
+			err = sendString(fmt.Sprintf("pid:%d", os.Getpid()))
+			if err != nil {
+				return fmt.Errorf("failed to send pid: %v", err)
+			}
+
+			return nil
+		}
+
+		err := sendInfoToMothership()
+		if err != nil {
+			log.Fatalf("sendInfoToMothership %v: %v", flags.Mothership, err)
+		}
 	}
 
 	// kill parent if this is a child of graceful restart
@@ -426,24 +502,45 @@ func EventLoop(ports []Port) {
 
 	log.Infof("entering event loop")
 
-	exitMethod := wait_for_signals()
+	exitMethod := waitForSignals()
 
-	if exitMethod == EXIT_GRACEFULLY { // wait for established connections to close and then die
+	if exitMethod == exitGracefully {
 
-		// FIXME: should stop servers from accepting new connections here!
+		// run graceful in parallel
+		// and wait for all of them to stop within a given time interval
+		// if they can't - just exit and let them rot
 
-		const ATTEMPTS_PER_SEC = 2
-		maxAttempts := daemonConfig.GetParentWaitTimeout() * ATTEMPTS_PER_SEC
+		nServers := len(startedServers)
+		doneChan := make(chan struct{}, nServers)
 
-		for i := uint32(0); i < maxAttempts; i++ {
-			for _, srv := range StartedServers {
-				currConn := atomic.LoadUint64(&srv.Server.Stats.ConnCur)
-				if currConn > 0 {
-					log.Debugf("%s still has %d connections", srv.Name, currConn)
-					time.Sleep(time.Second / ATTEMPTS_PER_SEC)
+		// ask servers to stop
+		for _, server := range startedServers {
+			s := server // copy for goroutine
+			go func() {
+				if err := s.server.StopGraceful(); err != nil {
+					log.Infof("failed to shutdown port %s gracefully: %s", s.name, err)
+				} else {
+					log.Infof("port %s stopped", s.name)
+				}
+				doneChan <- struct{}{}
+			}()
+		}
+
+		// wait for servers to stop
+		func() {
+			timeoutChan := time.After(time.Duration(daemonConfig.GetParentWaitTimeout()) * time.Second)
+			for {
+				select {
+				case <-timeoutChan:
+					return
+				case <-doneChan:
+					nServers--
+					if nServers == 0 {
+						return
+					}
 				}
 			}
-		}
+		}()
 	} else {
 		// do nothing for EXIT_IMMEDIATELY
 	}
@@ -455,10 +552,6 @@ func EventLoop(ports []Port) {
 	}
 }
 
-func CmdlineFlags() *Flags {
-	return &flags
-}
-
 func Hostname() string {
 	return hostname
 }
@@ -468,11 +561,48 @@ func DaemonConfig() *badoo_config.ServiceConfigDaemonConfigT {
 }
 
 func GpbPort(name string, handler interface{}, rpc gpbrpc.Protocol) Port {
-	return Port{name, handler, rpc, &gpbrpc.GpbsCodec, false}
+	return Port{
+		Name:      name,
+		Handler:   handler,
+		IsStarted: false,
+
+		Listen: func(network, address string) (net.Listener, error) {
+			return net.Listen(network, address)
+		},
+
+		NewServer: func(l net.Listener, p *Port) (gpbrpc.Server, error) {
+			s := gpbrpc.NewTCPServer(l, p.Handler, gpbrpc.TCPServerConfig{
+				Proto:           rpc,
+				Codec:           &gpbrpc.GpbsCodec,
+				PinbaSender:     p.PinbaSender,
+				SlowRequestTime: p.SlowRequestTime,
+			})
+			return s, nil
+		},
+	}
 }
 
 func JsonPort(name string, handler interface{}, rpc gpbrpc.Protocol) Port {
-	return Port{name, handler, rpc, &gpbrpc.JsonCodec, false}
+	return Port{
+		Name:      name,
+		Handler:   handler,
+		Proto:     rpc,
+		IsStarted: false,
+
+		Listen: func(network, address string) (net.Listener, error) {
+			return net.Listen(network, address)
+		},
+
+		NewServer: func(l net.Listener, p *Port) (gpbrpc.Server, error) {
+			s := gpbrpc.NewTCPServer(l, p.Handler, gpbrpc.TCPServerConfig{
+				Proto:           rpc,
+				Codec:           &gpbrpc.JsonCodec,
+				PinbaSender:     p.PinbaSender,
+				SlowRequestTime: p.SlowRequestTime,
+			})
+			return s, nil
+		},
+	}
 }
 
 func GetNumCPU() int {
@@ -489,6 +619,14 @@ func GetInitPhaseDuration() time.Duration {
 
 func GetStartupTime() time.Time {
 	return startupTime
+}
+
+func GetConfigPath() string {
+	return configPath
+}
+
+func GetStartedServers() map[string]*portServer {
+	return startedServers
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------
@@ -513,14 +651,18 @@ func getHostname() string {
 	return cname
 }
 
-func mergeCommandlineFlagsToConfig(flags Flags, config Config) {
+func mergeCommandlineFlagsToConfig(flags flagsCollection, config Config) {
 	// merge the rest of command line arguments into config
-	if "" != flags.LogFile {
+	if flags.LogFile != "" {
 		config.GetDaemonConfig().LogFile = proto.String(flags.LogFile)
 	}
 
-	if "" != flags.PidFile {
+	if flags.PidFile != "" {
 		config.GetDaemonConfig().PidFile = proto.String(flags.PidFile)
+	}
+
+	if flags.InstanceName != "" {
+		config.GetDaemonConfig().ServiceInstanceName = proto.String(flags.InstanceName)
 	}
 
 	if flags.Debug {
@@ -546,7 +688,7 @@ func initExpvars() {
 	}))
 
 	expvar.Publish("_service-stats", expvar.Func(func() interface{} {
-		stats, err := GatherServiceStats()
+		stats, err := gatherServiceStats()
 		if err != nil {
 			return struct {
 				Error string `json:"error"`

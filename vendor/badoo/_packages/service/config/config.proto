@@ -1,0 +1,69 @@
+syntax = "proto2";
+
+package badoo.config;
+
+message service_config {
+
+	message daemon_config_t {
+
+		message listen_t {
+			required string proto                 = 1;
+			required string address               = 2;
+			optional bool   pinba_enabled         = 4;
+		}
+
+/*
+		enum log_levels {
+			DEBUG   = 1;
+			NOTICE  = 2;
+			WARNING = 3;
+			ERROR   = 4;
+			ALERT   = 5;
+		}
+*/
+		enum log_levels {
+			PANIC   = 0;
+			FATAL   = 1;
+			ERROR   = 2;
+			WARNING = 3;
+			NOTICE  = 4;
+			DEBUG   = 5;
+		}
+
+		repeated listen_t   listen                   = 1;
+		required string     service_name             = 2; // pinba::hostname
+		required string     service_instance_name    = 3; // pinba::server_name
+		optional bool       daemonize                = 4;
+		optional string     user                     = 5;
+		optional string     group                    = 6;
+		optional string     pid_file                 = 7;
+		optional string     log_file                 = 8;
+		optional string     chdir                    = 9;
+		optional log_levels log_level                = 10 [default = NOTICE];
+		optional string     http_pprof_addr          = 11;                 // net/http/pprof + expvar address
+		optional uint32     max_cpus                 = 12 [default = 0];   // max cpus to use, 0 - unlimited
+		optional  int32     gc_percent               = 13;                 // run GC when heap grows by this much since last GC (do NOT add default here)
+		optional uint32     parent_wait_timeout      = 14 [default = 5];   // how long parent should wait for established connections (sec)
+		optional uint32     resolver_timeout         = 15 [default = 5];   // timeout for name resolution (sec)
+		optional string     pinba_address            = 16;
+
+		optional uint32     slow_request_ms          = 19; // log requests with response time >= slow_request_ms
+
+		// it's possible to use "vars":
+		// ${daemon} -- PACKAGE
+		// ${version} -- service_version
+		// ${service_name}, ${service_instance_name} -- use above
+		optional string     syslog_identity          = 17; // if non-empty, write messages to syslog
+		optional string     syslog_ip                = 18 [default = "127.0.0.1"]; // IPv4 address
+		optional uint32     syslog_port              = 20 [default = 10514];
+		optional uint32     syslog_send_buffer_size  = 21 [default = 0];
+
+		optional string     itops_comment            = 22;
+		optional bool       enable_debug_features    = 23 [default = false];
+
+		optional uint32     max_parallel_requests    = 34 [default = 100]; // how many parallel requests to accept (works in ports that have multiplexing only (i.e. zmq))
+		optional bool       enable_debugcharts       = 35 [default = true]; // set false if you see runtime.ReadMemStats() pauses (usually before go1.8)
+	}
+
+	required daemon_config_t daemon_config = 1;
+}

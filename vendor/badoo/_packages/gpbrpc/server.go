@@ -3,12 +3,10 @@ package gpbrpc
 import (
 	"badoo/_packages/log"
 	"badoo/_packages/pinba"
+
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
-	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -22,21 +20,26 @@ const (
 )
 
 var (
-	globalRequestId = uint64(0)
+	GlobalRequestId = uint64(0)
 )
 
+// ---------------------------------------------------------------------------------------------------------------
+
+type Server interface {
+	Listener() net.Listener
+
+	Stats() *ServerStats
+	Protocol() Protocol
+
+	Serve()
+	Stop() error
+	StopGraceful() error
+}
+
+// tcp server specific
 type ServerCodec interface {
 	ReadRequest(Protocol, net.Conn) (msgid uint32, msg proto.Message, nread int, status ConnStatus, err error)
 	WriteResponse(Protocol, net.Conn, proto.Message) (nwritten int, err error)
-}
-
-type RequestT struct {
-	Server    *Server
-	Conn      net.Conn
-	RequestId uint64        // globally unique id for this request, useful in matching log entries belonging to single request
-	MessageId uint32        // request_msgid enum value from protofile
-	Message   proto.Message // parsed message
-	PinbaReq  *pinba.Request
 }
 
 type ServerStats struct {
@@ -48,22 +51,19 @@ type ServerStats struct {
 	RequestsIdStat [MaxMsgID]uint64
 }
 
-type Server struct {
-	Listener        net.Listener
-	Codec           ServerCodec
-	Proto           Protocol
-	Handler         interface{}
-	Stats           ServerStats
-	pinbaSender     PinbaSender
-	pinbaReqNames   map[uint32]string // cached msgid -> pinba_request_name map
-	pinbaClientPool sync.Pool         // pinba.Client pool
-	onConnect       func(RequestT)
-	onDisconnect    func(RequestT)
-	slowRequestTime time.Duration
-}
-
 type PinbaSender interface {
 	Send(req *pinba.Request) error
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+
+type RequestT struct {
+	Server    Server
+	Conn      net.Conn      // FIXME: might be null (zmq has no 'connection', should change to an interface with remote addr, etc)
+	RequestId uint64        // globally unique id for this request, useful in matching log entries belonging to single request
+	MessageId uint32        // request_msgid enum value from protofile
+	Message   proto.Message // parsed message
+	PinbaReq  *pinba.Request
 }
 
 type ActionT int
@@ -88,6 +88,7 @@ func ResultClose() ResultT {
 	return ResultT{Action: ACTION_CLOSE}
 }
 
+// FIXME: this should be removed probably? what's the use for it anyway? (this is not event-driven libangel)
 func ResultSuspend() ResultT {
 	return ResultT{Action: ACTION_SUSPEND}
 }
@@ -96,171 +97,83 @@ func ResultNoResult() ResultT {
 	return ResultT{Action: ACTION_NO_RESULT}
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+
+// FIXME: RequestT args in methods here? name sucks as well
+//
 type connectWrapperChecker interface {
 	OnConnect(RequestT)
 	OnDisconnect(RequestT)
 }
 
-func NewServer(l net.Listener, p Protocol, c ServerCodec, handler interface{}, ps PinbaSender, slowRequestTime time.Duration) *Server {
-	s := &Server{
-		Listener:        l,
-		Codec:           c,
-		Proto:           p,
-		Handler:         handler,
-		Stats:           ServerStats{},
-		pinbaSender:     ps,
-		pinbaReqNames:   MakeRequestIdToPinbaNameMap(p),
-		slowRequestTime: slowRequestTime,
-	}
-
-	// FIXME(antoxa): connectWrapperChecker needs a rename, badly!
-	if m, ok := handler.(connectWrapperChecker); ok {
-		s.onConnect = m.OnConnect
-		s.onDisconnect = m.OnDisconnect
-	}
-
-	return s
+// basic server implementation, intended to be embedded by actual implementations (like tcpServer)
+// needs to be 'public' for zmqServer to work (since it's in a different package, to make cgo linking optional)
+type ServerImpl struct {
+	L               net.Listener
+	Proto           Protocol
+	Handler         interface{}
+	S               ServerStats
+	PinbaReqNames   map[uint32]string // cached msgid -> pinba_request_name map
+	PinbaSender     PinbaSender
+	SlowRequestTime time.Duration
 }
 
-func (server *Server) Serve() {
-	for {
-		conn, err := server.Listener.Accept()
-		if err != nil {
+func (server *ServerImpl) Stats() *ServerStats {
+	return &server.S
+}
 
-			if strings.Index(err.Error(), "use of closed network connection") != -1 {
-				// this error happens after we've called listener.Close() in other goroutine
-				return
-			}
+func (server *ServerImpl) Listener() net.Listener {
+	return server.L
+}
 
-			log.Errorf("accept() failed: \"%s\", will sleep for %v before trying again", err, SleepAfterAcceptError)
-			time.Sleep(SleepAfterAcceptError)
+func (server *ServerImpl) Protocol() Protocol {
+	return server.Proto
+}
 
-			continue
-		}
+func (server *ServerImpl) HandleRequest(req RequestT) ResultT {
+	atomic.AddUint64(&server.S.Requests, 1)
 
-		if server.onConnect != nil {
-			server.onConnect(RequestT{
-				Server: server,
-				Conn:   conn,
-			})
-		}
-
-		go server.serveConnection(conn)
+	if req.MessageId < MaxMsgID { // FIXME: make this dynamic
+		atomic.AddUint64(&server.S.RequestsIdStat[req.MessageId], 1)
 	}
-}
 
-func (server *Server) Stop() error {
-	return server.Listener.Close()
-}
+	startTime := time.Now() // use monotonic clock for timing things
 
-func (server *Server) serveConnection(conn net.Conn) {
-	log.Debugf("accepted connection: %s -> %s", conn.LocalAddr(), conn.RemoteAddr())
-	defer func() {
-		atomic.AddUint64(&server.Stats.ConnCur, ^uint64(0)) // decrements the value, ref: http://golang.org/pkg/sync/atomic/#AddUint64
-		log.Debugf("closing connection: %s -> %s", conn.LocalAddr(), conn.RemoteAddr())
+	result := server.Proto.Dispatch(req, server.Handler)
 
-		if server.onDisconnect != nil {
-			server.onDisconnect(RequestT{
-				Server: server,
-				Conn:   conn,
-			})
-		}
+	requestTime := time.Since(startTime)
 
-		conn.Close()
-	}()
-
-	atomic.AddUint64(&server.Stats.ConnCur, 1)
-	atomic.AddUint64(&server.Stats.ConnTotal, 1)
-
-	for {
-		// need these as var here, since goto might jump over their definition below
-		var (
-			result      ResultT
-			request     RequestT
-			startTime   time.Time
-			pinbaReq    pinba.Request
-			requestTime time.Duration
-		)
-
-		msgid, msg, bytes_read, status, err := server.Codec.ReadRequest(server.Proto, conn)
-		if err != nil {
-			if status == ConnEOF {
-				// connection was closed gracefully from client side
-				break
+	// log slow request if needed
+	if server.SlowRequestTime > 0 && server.SlowRequestTime <= requestTime {
+		reqName := MapRequestIdToName(server.Proto, req.MessageId)
+		reqBody := func() string {
+			if req.Message == nil {
+				return "{}"
 			}
-			if status == ConnOK {
-				// misunderstanding on protobuf level
-				result = server.Proto.ErrorGeneric(err)
-
-				// FIXME(antoxa): remove this goto, it's annoying to code around
-				goto write_response
-			}
-			// IO error or similar
-			log.Infof("aborting connection: %v", err)
-			break
-		}
-
-		// FIXME(antoxa): stats will not be incremented when ReadRequest returns err != nil and status == ConnOK
-		atomic.AddUint64(&server.Stats.BytesRead, uint64(bytes_read))
-		atomic.AddUint64(&server.Stats.Requests, 1)
-
-		request = RequestT{
-			Server:    server,
-			Conn:      conn,
-			RequestId: atomic.AddUint64(&globalRequestId, 1),
-			MessageId: msgid,
-			Message:   msg,
-			PinbaReq:  &pinbaReq,
-		}
-
-		if msgid < MaxMsgID {
-			atomic.AddUint64(&server.Stats.RequestsIdStat[msgid], 1)
-		}
-
-		startTime = time.Now()
-
-		result = server.Proto.Dispatch(request, server.Handler)
-
-		requestTime = time.Since(startTime)
-
-		// log slow request if needed
-		if server.slowRequestTime > 0 && server.slowRequestTime <= requestTime {
-			if msg != nil {
-				requestInfo := func() string {
-					reqName := MapRequestIdToName(server.Proto, msgid)
-					body, err := json.Marshal(msg)
-					if err != nil {
-						return fmt.Sprintf("%s %v", reqName, err)
-					}
-					return fmt.Sprintf("%s %s", reqName, body)
-				}()
-
-				log.Warnf("slow request (%d ms): %s; addr: %s <- %s", requestTime/time.Millisecond, requestInfo, conn.LocalAddr(), conn.RemoteAddr())
-			}
-		}
-
-		server.sendToPinba(&pinbaReq, server.pinbaReqNames[msgid], requestTime)
-
-	write_response:
-
-		if result.Action == ACTION_RESULT {
-			writeln, err := server.Codec.WriteResponse(server.Proto, conn, result.Message)
+			body, err := json.Marshal(req.Message)
 			if err != nil {
-				// write error: can't recover
-				log.Infof("unrecoverable error while writing: %v", err)
-				break
+				return err.Error()
 			}
-			atomic.AddUint64(&server.Stats.BytesWritten, uint64(writeln))
-		}
+			return string(body)
+		}()
 
-		if result.Action == ACTION_CLOSE {
-			break
+		if req.Conn != nil {
+			log.Warnf("slow request (%d ms): %s %s; addr: %s <- %s",
+				requestTime/time.Millisecond, reqName, reqBody, req.Conn.LocalAddr(), req.Conn.RemoteAddr())
+		} else {
+			log.Warnf("slow request (%d ms): %s %s; no conn;",
+				requestTime/time.Millisecond, reqName, reqBody)
 		}
 	}
+
+	server.SendToPinba(req.PinbaReq, server.PinbaReqNames[req.MessageId], requestTime)
+
+	return result
 }
 
-func (server *Server) sendToPinba(req *pinba.Request, script_name string, duration time.Duration) {
-	if server.pinbaSender == nil {
+func (server *ServerImpl) SendToPinba(req *pinba.Request, script_name string, duration time.Duration) {
+
+	if server.PinbaSender == nil {
 		return
 	}
 
@@ -268,7 +181,7 @@ func (server *Server) sendToPinba(req *pinba.Request, script_name string, durati
 	req.RequestCount = 1
 	req.RequestTime = duration
 
-	err := server.pinbaSender.Send(req)
+	err := server.PinbaSender.Send(req)
 	if err != nil { // this is pretty unlikely, therefore don't care about performance inside this 'if'
 
 		shouldLog := func() bool {
@@ -298,7 +211,7 @@ func (server *Server) sendToPinba(req *pinba.Request, script_name string, durati
 		}()
 
 		if shouldLog {
-			log.Warnf("sendToPinba() failed: %v", err)
+			log.Warnf("SendToPinba() failed: %v", err)
 		}
 	}
 }
