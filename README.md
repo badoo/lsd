@@ -93,6 +93,7 @@ We have some client libraries that implement this logic:
 - PHP
 - Go 
 - Java
+
 (will be published soon)
 
 _But you are free to just do open() => write_line() => close() and it will work fine_
@@ -127,6 +128,8 @@ We have some consumer libraries:
 - PHP
 - Go 
 - Java
+
+(will be published soon)
 
 # Configuration
 Configuration is taken from `conf/lsd.conf` by default, but you can specify custom config with `-c <path>`
@@ -270,6 +273,7 @@ If you have multiple datacenters or too much producer hosts, you may need some m
 In this mode LSD works as both client and server in single daemon
 
 Relay is a "fan in" in source DC for all category's data
+
 Router is a "fan out" in target DC (sends to appropriate local servers)
 
 `always_flock` is required in this case
