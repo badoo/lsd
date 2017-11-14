@@ -81,11 +81,11 @@ lsd_dir/category_name/year|month|day|hour|minute
 ```
 for example
 ```
-<lsd_dir>/<category_name>/201711031659
-<lsd_dir>/<category_name>/201711031700
-<lsd_dir>/<category_name>/201711031701
-<lsd_dir>/<category_name>/201711031702
-<lsd_dir>/<category_name>/201711031703
+lsd_dir/category_name/201711031659
+lsd_dir/category_name/201711031700
+lsd_dir/category_name/201711031701
+lsd_dir/category_name/201711031702
+lsd_dir/category_name/201711031703
 ...
 ```
 
