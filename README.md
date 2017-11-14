@@ -14,7 +14,7 @@ _ensure you have Linux or Mac OS operating system (Windows is not supported)_
 go get github.com/badoo/lsd
 cd "$GOPATH/src/github.com/badoo/lsd
 make
-$GOPATH/bin/lsd -c <path_to_config>
+$GOPATH/bin/lsd -c path_to_config
 ```
 
 # Architecture
@@ -38,8 +38,8 @@ It also has rotate/delete mechanics to prevent superlarge/old files to appear.
 ### File name formats and write contract
 
 ```
-<lsd_dir>/<category_name>.log
-<lsd_dir>/<category_name>/*
+lsd_dir/category_name.log
+lsd_dir/category_name/*
 ```
 
 All messages (lines) are considered to be less than PIPE_BUF (4k in Linux by default).
@@ -51,9 +51,9 @@ If you want to write lines larger than PIPE_BUF, you should use specific file na
 Maximum size for single line is 512k 
 
 ```
-<lsd_dir>/<category_name>/*_big
-<lsd_dir>/<category_name>_big.log
-<lsd_dir>/<category_name>_big.log
+lsd_dir/category_name/*_big
+lsd_dir/category_name_big.log
+lsd_dir/category_name_big.log
 ```
 
 _You should also escape line breaks if they do appear inside you data_
@@ -67,7 +67,7 @@ To keep workdir clean and small, LSD has to periodically delete data that has al
 It does rotate on maxFileSize or periodically on fileRotateInterval, specified in config
 
 Rotate algorithm:
-1) move `<lsd_dir>/somecategory.log` => `<lsd_dir>/somecategory.log.old`
+1) move `lsd_dir/somecategory.log` => `lsd_dir/somecategory.log.old`
 2) stream old and new files in parallel until every writer closes .old one
 3) when nobody holds .old file (writers always open only .log) and it is fully streamed, LSD can safely delete .old and go to step 1.
 
@@ -77,7 +77,7 @@ _Keep in mind that writers have to periodically reopen current file in order to 
 
 The most effective and reliable way is to write to small files, depending on current time
 ```
-<lsd_dir>/<category_name>/<year><month><day><hour><minute>
+lsd_dir/category_name/year|month|day|hour|minute
 ```
 for example
 ```
@@ -105,20 +105,20 @@ LSD Server accepts data from multiple LSD Clients and writes it to disk in separ
 ![Server write flow](https://badoo.github.com/lsd/assets/lsd_server.gif)
 
 ```
-<lsd_server_dir>/<category_name>/<category_name>-<year>-<month>-<day>_<6 digits number>
+lsd_server_dir/category_name/category_name-year-month-day_6 digits number (incrementing)
 ```
 There is also a symlink that points to currently active file (which LSD Server writes to) 
 ```
-<lsd_server_dir>/<category_name>/<category_name>_current
+lsd_server_dir/category_name/category_name_current
 ```
 
 Example
 ```
-<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000008
-<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000009
-<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000010
-<lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000011
-<lsd_server_dir>/<category_name>/<category_name>_current => <lsd_server_dir>/<category_name>/<category_name>-2016-12-01_000011
+lsd_server_dir/category_name/category_name-2016-12-01_000008
+lsd_server_dir/category_name/category_name-2016-12-01_000009
+lsd_server_dir/category_name/category_name-2016-12-01_000010
+lsd_server_dir/category_name/category_name-2016-12-01_000011
+lsd_server_dir/category_name/category_name_current => lsd_server_dir/category_name/category_name-2016-12-01_000011
 ```
 In this case consumer can process all files except one that is pointed by `_current` symlink (because LSD writes to it).
 
@@ -314,7 +314,7 @@ You can reduce absolute memory usage by tuning buffer sizes in config, but with 
 
 You can run subcommand healthcheck to receive current LSD status
 ```
-lsd healthcheck -c <path_to_config>
+lsd healthcheck -c path_to_config
 ```
 It returns current status of lsd daemon for given config.
 
@@ -376,11 +376,11 @@ Both sections also have array of generic errors.
 ## HDFS transfer
 You can transfer files directly from LSD server's workdir to HDFS with specific sub command. 
 ```
-lsd transfer-hdfs -dst-dir=<hdfs dst dir> -tmp-dir=<temp dir for upload> -namenode=<username>@<host>:<port> -delete=<true|false> "<category name pattern>"
+lsd transfer-hdfs -dst-dir=hdfs_dst_dir -tmp-dir=temp_dir_for_upload -namenode=username@host:port -delete=true|false "category name pattern"
 ```
 Category pattern has standard "bash glob" syntax.
 
-All files from LSD server dirs will be transferred to hdfs with <current_hostname>_ prefix (to make files unique)
+All files from LSD server dirs will be transferred to hdfs with current_hostname_ prefix (to make files unique)
 
 ## GZIP
 You can compress LSD traffic in two ways:
