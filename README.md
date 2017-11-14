@@ -19,7 +19,7 @@ $GOPATH/bin/lsd -c <path_to_config>
 
 # Architecture
 
-![Client-Server architecture](https://badoo.github.com/assets/lsd_architecture.jpg)
+![Client-Server architecture](https://badoo.github.com/lsd/assets/lsd_architecture.jpg)
 
 Producer application writes events (\n separated text lines of any format) into local files.
 
@@ -93,6 +93,7 @@ We have some client libraries that implement this logic:
 - PHP
 - Go 
 - Java
+(will be published soon)
 
 _But you are free to just do open() => write_line() => close() and it will work fine_
 
@@ -100,7 +101,7 @@ _But you are free to just do open() => write_line() => close() and it will work 
 
 LSD Server accepts data from multiple LSD Clients and writes it to disk in separate chunks according to size/time threshold
 
-![Server write flow](https://badoo.github.com/assets/lsd_server.gif)
+![Server write flow](https://badoo.github.com/lsd/assets/lsd_server.gif)
 
 ```
 <lsd_server_dir>/<category_name>/<category_name>-<year>-<month>-<day>_<6 digits number>
@@ -262,7 +263,7 @@ Example
 
 ## Relay mode (probably you won't need it)
 
-![Relay example](https://badoo.github.com/assets/lsd_relay.jpg)
+![Relay example](https://badoo.github.com/lsd/assets/lsd_relay.jpg)
 
 If you have multiple datacenters or too much producer hosts, you may need some multiplexers (called relays)
 
