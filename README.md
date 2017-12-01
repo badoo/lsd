@@ -11,9 +11,7 @@ LSD is a streaming daemon that has been developed as a replacement for facebook'
 # How to install
 _ensure you have Linux or Mac OS operating system (Windows is not supported)_
 ```
-go get github.com/badoo/lsd
-cd "$GOPATH/src/github.com/badoo/lsd
-make
+go install github.com/badoo/lsd
 $GOPATH/bin/lsd -c path_to_config
 ```
 
