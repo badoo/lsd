@@ -305,6 +305,11 @@ Router is a "fan out" in target DC (sends to appropriate local servers)
 
 # Exploitation
 
+## Daemon user
+The best way to run LSD is to do it under the same user that writes to files or the user who has permissions to `lsof` his opened files.
+LSD periodically checks all files that are going to be deleted and deletes only when no one holds them 
+(it will delete rotated files immediately in case of wrong permissions)
+
 ## Resource usage
 Both client and server have low rusage (it grows in case of gzip: true), but consume memory, proportional to number of categories streamed.
 You can reduce absolute memory usage by tuning buffer sizes in config, but with default settings in badoo's usecase it's average memory usage is less then 1gb RSS
