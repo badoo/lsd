@@ -107,12 +107,13 @@ LSD Server accepts data from multiple LSD Clients and writes it to disk in separ
 ```
 lsd_server_dir/category_name/category_name-year-month-day_6 digits number (incrementing)
 ```
-There is also a symlink that points to currently active file (which LSD Server writes to) 
+
+There is also a symlink that points to currently active file (which LSD Server writes to):
 ```
 lsd_server_dir/category_name/category_name_current
 ```
 
-Example
+Example:
 ```
 lsd_server_dir/category_name/category_name-2016-12-01_000008
 lsd_server_dir/category_name/category_name-2016-12-01_000009
@@ -120,16 +121,16 @@ lsd_server_dir/category_name/category_name-2016-12-01_000010
 lsd_server_dir/category_name/category_name-2016-12-01_000011
 lsd_server_dir/category_name/category_name_current => lsd_server_dir/category_name/category_name-2016-12-01_000011
 ```
-In this case consumer can process all files except one that is pointed by `_current` symlink (because LSD writes to it).
 
-When threshold comes and `_000012` file is created, LSD switches symlink to it. 
+When threshold comes and `_000012` file is created, LSD atomically switches symlink to it. 
 
-We have some consumer libraries:
+In this case consumer can process all files younger than one that is pointed by  `_current` symlink
+(because LSD is writing to it or has already created next one, but didn't switch symlink yet).
+
+We have some consumer libraries (will be published soon):
 - PHP
 - Go 
 - Java
-
-(will be published soon)
 
 # Configuration
 Configuration is taken from `conf/lsd.conf` by default, but you can specify custom config with `-c <path>`
@@ -322,6 +323,7 @@ Example:
 ```
 lsd_experiment healthcheck -c /local/lsd/etc/lsd.conf | jq '.'
 {
+  "is_running": true,
   "client": {
     "undelivered": {
       "debug_mgalanin_cluster_priority": 0,
@@ -340,6 +342,7 @@ lsd_experiment healthcheck -c /local/lsd/etc/lsd.conf | jq '.'
       "spam_messages": 258,
       "stat_events": 0
     },
+    "backlog_size": 1,
     "errors": []
   },
   "server": {

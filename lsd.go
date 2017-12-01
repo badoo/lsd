@@ -5,7 +5,7 @@ import (
 	"badoo/_packages/service"
 	"badoo/_packages/service/config"
 	"github.com/badoo/lsd/internal/client"
-	"github.com/badoo/lsd/internal/client/health"
+	"github.com/badoo/lsd/internal/health"
 	"github.com/badoo/lsd/internal/server"
 	"github.com/badoo/lsd/internal/server/hdfs"
 	"github.com/badoo/lsd/internal/traffic"

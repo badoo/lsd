@@ -4,9 +4,6 @@ import (
 	"badoo/_packages/log"
 	"github.com/badoo/lsd/internal/traffic"
 	"github.com/badoo/lsd/proto"
-	"bufio"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -79,13 +76,6 @@ func (l *listener) processEvents() error {
 	for {
 		select {
 		case event := <-l.inCh:
-			err := l.maybeDecompressEvent(event.RequestNewEventsEventT)
-			if err != nil {
-				// this event has not been accepted, so we will not discard it in
-				// writer.close
-				event.answerCh <- nil
-				return fmt.Errorf("failed to decompress event: %v", err)
-			}
 			rotated, err := writer.write(event)
 			if err != nil {
 				return fmt.Errorf("failed to write event: %v", err)
@@ -191,56 +181,4 @@ func (l *listener) findLastChunk() (*chunkInfo, error) {
 		}
 	}
 	return result, nil
-}
-
-func (w *listener) maybeDecompressEvent(ev *lsd.RequestNewEventsEventT) error {
-
-	if !ev.GetIsCompressed() {
-		return nil
-	}
-
-	lines := ev.GetLines()
-	if len(lines) == 0 {
-		return nil
-	}
-	// TODO(antoxa): replace Buffer with a custom string reader, to avoid copying
-	// TODO(antoxa): reuse gzip reader instead of allocating
-	r := bytes.NewBufferString(lines[0])
-	gz, err := gzip.NewReader(r)
-	if err != nil {
-		return fmt.Errorf("bad gzip header for '%s': %v", ev.GetCategory(), err)
-	}
-
-	rawLines, err := func() ([]string, error) {
-		// TODO(antoxa): reuse buffered reader instead of allocating
-
-		// FIXME(antoxa): expect to read no more than fs write buffer size at once
-		// this assumption is probably incorrect and we should estimate based on MAX_LINES_PER_BATCH
-		// or just send uncompressed data length from the client
-		br := bufio.NewReader(gz)
-
-		var result []string
-		for {
-			line, err := br.ReadString('\n')
-
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			result = append(result, line)
-		}
-		return result, nil
-	}()
-
-	if err != nil {
-		return fmt.Errorf("bad gzip data for '%s': %v", ev.GetCategory(), err)
-	}
-
-	ev.Lines = rawLines
-	*ev.IsCompressed = false // avoid 1 alloc and importing proto
-
-	return nil
 }
