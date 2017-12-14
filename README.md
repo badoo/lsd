@@ -9,10 +9,10 @@ LSD is a streaming daemon that has been developed as a replacement for facebook'
  - in general you don't need any specific library to send events (just write to plain files)
 
 # How to install
-_ensure you have Linux or Mac OS operating system (Windows is not supported)_
+_You must have either Linux or macOS (Windows and FreeBSD are not supported)_
 ```
-go install github.com/badoo/lsd
-$GOPATH/bin/lsd -c path_to_config
+> go get github.com/badoo/lsd
+> $GOPATH/bin/lsd -c path_to_config
 ```
 
 # Architecture
@@ -40,21 +40,17 @@ lsd_dir/category_name.log
 lsd_dir/category_name/*
 ```
 
-All messages (lines) are considered to be less than PIPE_BUF (4k in Linux by default).
+All messages written to these files must be less than PIPE_BUF (4k in Linux by default). You must use append mode ("a" flag or O_APPEND) when sending events to prevent data from mixing.
 
-It provides a guarantee of atomic writes to prevent lines split and data corruption.
-
-If you want to write lines larger than PIPE_BUF, you should use specific file names and flock(LOCK_EX) for writing.
-
+If you want to write lines larger than PIPE_BUF, you must use the following file names and flock(LOCK_EX) for writing.
 Maximum size for single line is 512k 
 
 ```
 lsd_dir/category_name/*_big
 lsd_dir/category_name_big.log
-lsd_dir/category_name_big.log
 ```
 
-_You should also escape line breaks if they do appear inside you data_
+_You must also escape line breaks if they do appear inside you data_
 
 ### Rotate/delete flow
 
@@ -66,7 +62,7 @@ It does rotate on maxFileSize or periodically on fileRotateInterval, specified i
 
 Rotate algorithm:
 1) move `lsd_dir/somecategory.log` => `lsd_dir/somecategory.log.old`
-2) stream old and new files in parallel until every writer closes .old one
+2) stream old and new files concurrently until every writer closes .old one
 3) when nobody holds .old file (writers always open only .log) and it is fully streamed, LSD can safely delete .old and go to step 1.
 
 _Keep in mind that writers have to periodically reopen current file in order to make LSD Client available to pass step 2_
@@ -94,7 +90,7 @@ We have some client libraries that implement this logic:
 
 (will be published soon)
 
-_But you are free to just do open() => write_line() => close() and it will work fine_
+_But you are free to just do open("filename", "a") => write_line() => close() and it will work fine_
 
 ## LSD Server
 
@@ -306,7 +302,7 @@ Router is a "fan out" in target DC (sends to appropriate local servers)
 # Exploitation
 
 ## Daemon user
-The best way to run LSD is to do it under the same user that writes to files or the user who has permissions to `lsof` his opened files.
+The best way to run LSD is to do it under the same user that writes to files. If multiple users write to filesystem then you will need to run LSD as root (not recommended) or give it permissions to stat() open file descriptors using `setcap`.
 LSD periodically checks all files that are going to be deleted and deletes only when no one holds them 
 (it will delete rotated files immediately in case of wrong permissions)
 
