@@ -56,7 +56,6 @@ func (c *Client) Start() {
 	// save offsets db to disk
 	go c.saveOffsetsLoop()
 
-	c.netRouter.start()
 	c.fsRouter.start()
 }
 

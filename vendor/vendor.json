@@ -5,110 +5,104 @@
 		{
 			"checksumSHA1": "Y7V6P74Lmw7yTyYL8lKhhnNIoJs=",
 			"path": "badoo/_packages/dns",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
-			"checksumSHA1": "j+f/bRIDgzy2Ecq89EHFVyKEBDM=",
+			"checksumSHA1": "CmZudDRx02iIhA4d4fXSqTyB+3A=",
 			"path": "badoo/_packages/gpbrpc",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "ZzD7JKuFFziTvOjpHZ9RqLkC0Cw=",
 			"path": "badoo/_packages/gpbrpc/zmq",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "JYw1+s9SBkHZai28Rx+srtOKPB8=",
 			"path": "badoo/_packages/log",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "+5gzv1u8u/ED4krk8K/d2CQAUZE=",
 			"path": "badoo/_packages/log/hooks/syslog",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
-			"checksumSHA1": "WGiVp2a0q2cbAWlUKLNmW3d4uJM=",
-			"path": "badoo/_packages/lsd",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
-		},
-		{
-			"checksumSHA1": "5xhhdGExoHsqtM67Y8A31jC9WfM=",
+			"checksumSHA1": "BY23SkyEYLRoEPy4To1lrS9Q3Pg=",
 			"path": "badoo/_packages/pinba",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "wlbMbrmDc1eX1UCaBttbu8CWlI0=",
 			"path": "badoo/_packages/pinba/proto",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
-			"checksumSHA1": "MXySgfrQCIzXN8Muvm9Rat4DsUk=",
+			"checksumSHA1": "dDS0X1r6yf5QXEPc0//bb6Y8b/U=",
 			"path": "badoo/_packages/service",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "gGXUPyHXp/XxOguBezeqqmFOM3I=",
 			"path": "badoo/_packages/service/config",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
-			"checksumSHA1": "JN2YL3MF+CFv5I4gBb5GGwMJFT4=",
+			"checksumSHA1": "jcgnizgPNc18Y9WIfB2jDISBICo=",
 			"path": "badoo/_packages/service/stats",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
-			"checksumSHA1": "NZJNeyvW2HgKUsZZkW2Ebleqi1c=",
+			"checksumSHA1": "znzQk0CzbpGKrbaUwgCDApYVAx0=",
 			"path": "badoo/_packages/util",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "yOy/zcxLGqavP8jGddbeXNDtOkk=",
 			"path": "badoo/_packages/util/debugcharts",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
-			"checksumSHA1": "mX90gaW9IQbTOpdgQgREv8fc6wE=",
+			"checksumSHA1": "6Mot7rVB1MKsEbixRShHBBNtsPA=",
 			"path": "badoo/_packages/util/debugcharts/bindata",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "oreBq1S93435rnNnY1b8y25spm8=",
 			"path": "badoo/_packages/util/deepcopy",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "Ev3MARVdxTKChJDb14pmiEmFoE4=",
 			"path": "badoo/_packages/util/netutil",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "JWYo6XmR7vtFKcCBYudFQfQbX3E=",
 			"path": "badoo/_packages/util/osutil",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "MM+qqFsbKzkBkHOWYd/KR9Pu13U=",
 			"path": "badoo/_packages/util/structs",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "qtjd74+bErubh+qyv3s+lWmn9wc=",
@@ -156,15 +150,15 @@
 			"checksumSHA1": "Z7UE0jx2PZhWuH0rXdhgFINgxto=",
 			"origin": "badoo/vendor/github.com/gorilla/handlers",
 			"path": "github.com/gorilla/handlers",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "VXJdAgVeM+scYJH3UgBznkuldBA=",
 			"origin": "badoo/vendor/github.com/gorilla/websocket",
 			"path": "github.com/gorilla/websocket",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "mA7isU/nIAT5ytwIzK65H0vlVqI=",
@@ -194,50 +188,50 @@
 			"checksumSHA1": "gXLhXm2SDqK8MgB1LpHWThQGsyo=",
 			"origin": "badoo/vendor/github.com/pebbe/zmq4",
 			"path": "github.com/pebbe/zmq4",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "D4ykpIWCkigwlqfT/fdWrUFKG3g=",
 			"origin": "badoo/vendor/github.com/shirou/gopsutil/cpu",
 			"path": "github.com/shirou/gopsutil/cpu",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "QZnfTFACEnIoGz+k4BqCZB/GQTY=",
 			"origin": "badoo/vendor/github.com/shirou/gopsutil/host",
 			"path": "github.com/shirou/gopsutil/host",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "/JUyf/HME7nkAZdAYnFCPWzbEqk=",
 			"origin": "badoo/vendor/github.com/shirou/gopsutil/internal/common",
 			"path": "github.com/shirou/gopsutil/internal/common",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "UuwHornIODuEq7fYnsZwdVgERLk=",
 			"origin": "badoo/vendor/github.com/shirou/gopsutil/mem",
 			"path": "github.com/shirou/gopsutil/mem",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "U0FOcjZyfqvs/vxkouKyCqhM3P0=",
 			"origin": "badoo/vendor/github.com/shirou/gopsutil/net",
 			"path": "github.com/shirou/gopsutil/net",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "HsDLhim6EdsLNQSr7JGXfQ9ODG8=",
 			"origin": "badoo/vendor/github.com/shirou/gopsutil/process",
 			"path": "github.com/shirou/gopsutil/process",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		},
 		{
 			"checksumSHA1": "Nve7SpDmjsv6+rhkXAkfg/UQx94=",
@@ -279,8 +273,8 @@
 			"checksumSHA1": "pBPFzDGt3AVSRffB7ffiUnruFUk=",
 			"origin": "badoo/vendor/golang.org/x/sys/windows",
 			"path": "golang.org/x/sys/windows",
-			"revision": "5e11ed389f4882bf9035b8155ea18935018f0ebf",
-			"revisionTime": "2017-11-13T15:29:37Z"
+			"revision": "69f008c8ca5a9766a0fe2b65d88800b004637dbc",
+			"revisionTime": "2018-01-17T13:46:26Z"
 		}
 	],
 	"rootPath": "github.com/badoo/lsd"

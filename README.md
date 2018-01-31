@@ -11,7 +11,7 @@ LSD is a streaming daemon that has been developed as a replacement for facebook'
 # How to install
 _ensure you have Linux or Mac OS operating system (Windows is not supported)_
 ```
-go install github.com/badoo/lsd
+go get github.com/badoo/lsd
 $GOPATH/bin/lsd -c path_to_config
 ```
 
@@ -130,6 +130,14 @@ We have some consumer libraries (will be published soon):
 - Go 
 - Java
 
+## Plain log mode
+
+For simple cases when you just need to aggregate some logs from cluster to a single file, you can use
+
+```"mode": "PLAIN_LOG"```
+
+Then all input will be stored in a single <category_name>[.gz] file, which is reopened every `file_rotate_interval` seconds
+
 # Configuration
 Configuration is taken from `conf/lsd.conf` by default, but you can specify custom config with `-c <path>`
 
@@ -226,20 +234,28 @@ Proto
 ```
 message server_config_t {
 
+    enum write_mode {
+        CHUNK_FILES = 1;
+        PLAIN_LOG = 2;
+    }
+
     message server_settings_t {
-        repeated string categories = 1;                 // category masks list (only "*" is supported as mask)
-        optional uint64 max_file_size = 2;              // max output file size in bytes
-        optional uint64 file_rotate_interval = 3;       // output file rotate interval in seconds
-        optional bool gzip = 4 [default = false];       // gzip data that is written to disk
-        optional uint64 gzip_parallel = 5 [default = 1];// use this only if you are 100% sure that you need parallel gzip
+        repeated string categories = 1;                         // category masks list (only "*" is supported as mask)
+        optional write_mode mode = 2 [default = CHUNK_FILES];   // whether use plain or chunked scheme
+        optional uint64 max_file_size = 3;               // max output file size in bytes
+        optional uint64 file_rotate_interval = 4;        // output file rotate interval in seconds
+        optional bool gzip = 5 [default = false];        // gzip data that is written to disk
+        optional uint64 gzip_parallel = 6 [default = 1]; // use this only if you are 100% sure that you need parallel gzip
     };
+
     // default settings that are redefined by more concrete ones (above)
     required string target_dir = 1;
-    optional uint64 max_file_size = 2 [default = 5000000];           // max output file size in bytes
-    optional uint64 file_rotate_interval = 3 [default = 5];          // output file rotate interval in seconds
-    repeated server_settings_t per_category_settings = 4;            // per-category settings (max_file_size and file_rotate_interval)
-    optional uint64 error_sleep_interval = 5 [default = 60];
-    optional uint64 traffic_stats_recalc_interval = 6 [default = 10];// update traffic stats in seconds
+    optional write_mode mode = 2 [default = CHUNK_FILES];
+    optional uint64 max_file_size = 3 [default = 5000000];           // max output file size in bytes
+    optional uint64 file_rotate_interval = 4 [default = 5];          // output file rotate interval in seconds
+    repeated server_settings_t per_category_settings = 5;            // per-category settings (max_file_size and file_rotate_interval)
+    optional uint64 error_sleep_interval = 6 [default = 60];
+    optional uint64 traffic_stats_recalc_interval = 7 [default = 10];// update traffic stats in seconds
 };
 ```
 Example
@@ -251,6 +267,7 @@ Example
     "per_category_settings": [
         {
             "categories": ["error_log"],
+            "mode": "PLAIN_LOG",
             "max_file_size": 1000000,
             "file_rotate_interval": 10,
         },

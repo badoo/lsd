@@ -7,6 +7,7 @@ const OLD_FILE_SUFFIX = ".old"
 const BIG_FILE_SUFFIX = "_big"
 const LOG_FILE_SUFFIX = ".log"
 
+const READ_BUFFER_SIZE = 1 << 14                          // 16kb
 const MAX_BYTES_PER_BATCH = network.MAX_BYTES_TO_SEND / 2 // depends on how much we can to network at once
 const MAX_BYTES_PER_LINE = 1 << 20                        // 1mb per line
 

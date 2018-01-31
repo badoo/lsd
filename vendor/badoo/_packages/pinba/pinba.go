@@ -40,7 +40,7 @@ type Request struct {
 	Stime        float32
 	timers       []Timer
 	Status       uint32
-	Tags         map[string]string
+	tags         map[string]string
 	lk           sync.Mutex
 }
 
@@ -241,7 +241,7 @@ func (req *Request) Serialize() ([]byte, error) {
 		},
 	}
 
-	pbreq.preallocateArrays(req.timers, req.Tags)
+	pbreq.preallocateArrays(req.timers, req.tags)
 
 	for _, timer := range req.timers {
 		pbreq.TimerHitCount = append(pbreq.TimerHitCount, 1)
@@ -249,7 +249,7 @@ func (req *Request) Serialize() ([]byte, error) {
 		pbreq.mergeTimerTags(timer.Tags)
 	}
 
-	pbreq.mergeRequestTags(req.Tags)
+	pbreq.mergeRequestTags(req.tags)
 
 	buf := make([]byte, pbreq.Size())
 	n, err := pbreq.MarshalTo(buf)
@@ -258,14 +258,36 @@ func (req *Request) Serialize() ([]byte, error) {
 }
 
 func (req *Request) AddTimer(timer *Timer) {
+	// FIXME(antoxa): need to stop timer here
 	req.lk.Lock()
-	defer req.lk.Unlock()
-
 	req.timers = append(req.timers, *timer)
+	req.lk.Unlock()
+}
+
+func (req *Request) AddTag(name, value string) {
+	req.lk.Lock()
+
+	if req.tags == nil {
+		req.tags = make(map[string]string)
+	}
+
+	req.tags[name] = value
+
+	req.lk.Unlock()
 }
 
 func (req *Request) AddTags(tags map[string]string) {
-	req.Tags = tags
+	req.lk.Lock()
+
+	if req.tags == nil {
+		req.tags = tags
+	} else {
+		for name, value := range tags {
+			req.tags[name] = value
+		}
+	}
+
+	req.lk.Unlock()
 }
 
 // this is exactly the same as AddTimer

@@ -18,9 +18,10 @@ var RequestMsgid_gpbrpc_name = map[uint32]string{
 	2: "request_version",
 	3: "request_memory_stats",
 	4: "request_proc_stats",
-	5: "request_zlog_notice",
+	5: "request_log_notice",
 	6: "request_config_json",
 	7: "request_return_memory_to_os",
+	8: "request_log_set_level",
 }
 
 var RequestMsgid_gpbrpc_value = map[string]uint32{
@@ -28,9 +29,10 @@ var RequestMsgid_gpbrpc_value = map[string]uint32{
 	"request_version":             2,
 	"request_memory_stats":        3,
 	"request_proc_stats":          4,
-	"request_zlog_notice":         5,
+	"request_log_notice":          5,
 	"request_config_json":         6,
 	"request_return_memory_to_os": 7,
+	"request_log_set_level":       8,
 }
 
 var ResponseMsgid_gpbrpc_name = map[uint32]string{
@@ -40,15 +42,17 @@ var ResponseMsgid_gpbrpc_name = map[uint32]string{
 	4: "response_memory_stats",
 	5: "response_proc_stats",
 	6: "response_config_json",
+	7: "response_log_set_level",
 }
 
 var ResponseMsgid_gpbrpc_value = map[string]uint32{
-	"response_generic":      1,
-	"response_stats":        2,
-	"response_version":      3,
-	"response_memory_stats": 4,
-	"response_proc_stats":   5,
-	"response_config_json":  6,
+	"response_generic":       1,
+	"response_stats":         2,
+	"response_version":       3,
+	"response_memory_stats":  4,
+	"response_proc_stats":    5,
+	"response_config_json":   6,
+	"response_log_set_level": 7,
 }
 
 func (GpbrpcType) GetRequestMsgid(msg proto.Message) uint32 {
@@ -61,12 +65,14 @@ func (GpbrpcType) GetRequestMsgid(msg proto.Message) uint32 {
 		return uint32(RequestMsgid_REQUEST_MEMORY_STATS)
 	case *RequestProcStats:
 		return uint32(RequestMsgid_REQUEST_PROC_STATS)
-	case *RequestZlogNotice:
-		return uint32(RequestMsgid_REQUEST_ZLOG_NOTICE)
+	case *RequestLogNotice:
+		return uint32(RequestMsgid_REQUEST_LOG_NOTICE)
 	case *RequestConfigJson:
 		return uint32(RequestMsgid_REQUEST_CONFIG_JSON)
 	case *RequestReturnMemoryToOs:
 		return uint32(RequestMsgid_REQUEST_RETURN_MEMORY_TO_OS)
+	case *RequestLogSetLevel:
+		return uint32(RequestMsgid_REQUEST_LOG_SET_LEVEL)
 	default:
 		panic("you gave me the wrong message")
 	}
@@ -102,6 +108,8 @@ func (GpbrpcType) GetResponseMsgid(msg proto.Message) uint32 {
 		return uint32(ResponseMsgid_RESPONSE_PROC_STATS)
 	case *ResponseConfigJson:
 		return uint32(ResponseMsgid_RESPONSE_CONFIG_JSON)
+	case *ResponseLogSetLevel:
+		return uint32(ResponseMsgid_RESPONSE_LOG_SET_LEVEL)
 	default:
 		panic("you gave me the wrong message")
 	}
@@ -121,12 +129,14 @@ func (GpbrpcType) GetRequestMsg(request_msgid uint32) proto.Message {
 		return &RequestMemoryStats{}
 	case RequestMsgid_REQUEST_PROC_STATS:
 		return &RequestProcStats{}
-	case RequestMsgid_REQUEST_ZLOG_NOTICE:
-		return &RequestZlogNotice{}
+	case RequestMsgid_REQUEST_LOG_NOTICE:
+		return &RequestLogNotice{}
 	case RequestMsgid_REQUEST_CONFIG_JSON:
 		return &RequestConfigJson{}
 	case RequestMsgid_REQUEST_RETURN_MEMORY_TO_OS:
 		return &RequestReturnMemoryToOs{}
+	case RequestMsgid_REQUEST_LOG_SET_LEVEL:
+		return &RequestLogSetLevel{}
 	default:
 		return nil
 	}
@@ -146,6 +156,8 @@ func (GpbrpcType) GetResponseMsg(response_msgid uint32) proto.Message {
 		return &ResponseProcStats{}
 	case ResponseMsgid_RESPONSE_CONFIG_JSON:
 		return &ResponseConfigJson{}
+	case ResponseMsgid_RESPONSE_LOG_SET_LEVEL:
+		return &ResponseLogSetLevel{}
 	default:
 		return nil
 	}
@@ -156,9 +168,10 @@ type GpbrpcInterface interface {
 	RequestVersion(rctx gpbrpc.RequestT, request *RequestVersion) gpbrpc.ResultT
 	RequestMemoryStats(rctx gpbrpc.RequestT, request *RequestMemoryStats) gpbrpc.ResultT
 	RequestProcStats(rctx gpbrpc.RequestT, request *RequestProcStats) gpbrpc.ResultT
-	RequestZlogNotice(rctx gpbrpc.RequestT, request *RequestZlogNotice) gpbrpc.ResultT
+	RequestLogNotice(rctx gpbrpc.RequestT, request *RequestLogNotice) gpbrpc.ResultT
 	RequestConfigJson(rctx gpbrpc.RequestT, request *RequestConfigJson) gpbrpc.ResultT
 	RequestReturnMemoryToOs(rctx gpbrpc.RequestT, request *RequestReturnMemoryToOs) gpbrpc.ResultT
+	RequestLogSetLevel(rctx gpbrpc.RequestT, request *RequestLogSetLevel) gpbrpc.ResultT
 }
 
 func (GpbrpcType) Dispatch(rctx gpbrpc.RequestT, abstract_service interface{}) gpbrpc.ResultT {
@@ -178,15 +191,18 @@ func (GpbrpcType) Dispatch(rctx gpbrpc.RequestT, abstract_service interface{}) g
 	case RequestMsgid_REQUEST_PROC_STATS:
 		r := rctx.Message.(*RequestProcStats)
 		return service.RequestProcStats(rctx, r)
-	case RequestMsgid_REQUEST_ZLOG_NOTICE:
-		r := rctx.Message.(*RequestZlogNotice)
-		return service.RequestZlogNotice(rctx, r)
+	case RequestMsgid_REQUEST_LOG_NOTICE:
+		r := rctx.Message.(*RequestLogNotice)
+		return service.RequestLogNotice(rctx, r)
 	case RequestMsgid_REQUEST_CONFIG_JSON:
 		r := rctx.Message.(*RequestConfigJson)
 		return service.RequestConfigJson(rctx, r)
 	case RequestMsgid_REQUEST_RETURN_MEMORY_TO_OS:
 		r := rctx.Message.(*RequestReturnMemoryToOs)
 		return service.RequestReturnMemoryToOs(rctx, r)
+	case RequestMsgid_REQUEST_LOG_SET_LEVEL:
+		r := rctx.Message.(*RequestLogSetLevel)
+		return service.RequestLogSetLevel(rctx, r)
 	default:
 		panic("screw you")
 	}
@@ -224,7 +240,7 @@ func (GpbrpcType) ErrorGeneric(args ...interface{}) gpbrpc.ResultT {
 		return $proto$.Gpbrpc.ErrorGeneric("not implemented")
 	}
 
-	func ($receiver$) RequestZlogNotice(rctx gpbrpc.RequestT, request *$proto$.RequestZlogNotice) gpbrpc.ResultT {
+	func ($receiver$) RequestLogNotice(rctx gpbrpc.RequestT, request *$proto$.RequestLogNotice) gpbrpc.ResultT {
 		return $proto$.Gpbrpc.ErrorGeneric("not implemented")
 	}
 
@@ -233,6 +249,10 @@ func (GpbrpcType) ErrorGeneric(args ...interface{}) gpbrpc.ResultT {
 	}
 
 	func ($receiver$) RequestReturnMemoryToOs(rctx gpbrpc.RequestT, request *$proto$.RequestReturnMemoryToOs) gpbrpc.ResultT {
+		return $proto$.Gpbrpc.ErrorGeneric("not implemented")
+	}
+
+	func ($receiver$) RequestLogSetLevel(rctx gpbrpc.RequestT, request *$proto$.RequestLogSetLevel) gpbrpc.ResultT {
 		return $proto$.Gpbrpc.ErrorGeneric("not implemented")
 	}
 
