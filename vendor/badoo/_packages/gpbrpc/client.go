@@ -25,6 +25,7 @@ type Client interface {
 	Address() string
 	Close()
 	CloseNoReuse()
+	SetRequestTimeout(timeout time.Duration)
 }
 
 type defaultClient struct {
@@ -101,11 +102,17 @@ func NewClient(address string, p Protocol, c ClientCodec, connect_timeout, reque
 			continue
 		}
 
-		log.Debugf("reused existing client %p for %s (after %d tries)", client, address, done_tries)
+		client.SetRequestTimeout(request_timeout)
+
+		log.Debugf("reused existing client %p for %s with request_timeout %s (after %d tries)", client, address, request_timeout, done_tries)
 		return clientTyped
 	}
 
 	return NewClientCreate(address, ips, p, c, connect_timeout, request_timeout)
+}
+
+func (client *defaultClient) SetRequestTimeout(timeout time.Duration) {
+	client.request_timeout = timeout
 }
 
 func (client *defaultClient) Address() string {

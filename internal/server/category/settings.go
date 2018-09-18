@@ -1,4 +1,4 @@
-package server
+package category
 
 import (
 	"compress/gzip"
@@ -7,41 +7,44 @@ import (
 
 	"io"
 
+	"github.com/badoo/lsd/proto"
+
 	"github.com/klauspost/pgzip"
 )
 
 const EXTENSION_GZIP = ".gz"
 
-type categorySettings struct {
-	patterns           []*regexp.Regexp
-	maxFileSize        uint64
-	fileRotateInterval uint64
-	gzip               bool
-	gzipParallel       uint64
+type Settings struct {
+	Mode               lsd.LsdConfigServerConfigTWriteMode
+	Patterns           []*regexp.Regexp
+	MaxFileSize        uint64
+	FileRotateInterval uint64
+	Gzip               bool
+	GzipParallel       uint64
 }
 
-func (cs *categorySettings) getExtension() string {
-	if cs.gzip {
+func (s Settings) getExtension() string {
+	if s.Gzip {
 		return EXTENSION_GZIP
 	}
 	return ""
 }
 
-func (cs *categorySettings) getEncoder(fp *os.File) writeStatFlushCloser {
+func (s Settings) getEncoder(fp *os.File) writeStatFlushCloser {
 
-	if !cs.gzip {
+	if !s.Gzip {
 		return &plainEncoder{fp}
 	}
-	// just a normal single thread gzip
-	if cs.gzipParallel == 1 {
+	// just a normal single thread Gzip
+	if s.GzipParallel == 1 {
 		return &gzipEncoder{
 			fp: fp,
 			gz: gzip.NewWriter(fp),
 		}
 	}
-	// parallel gzip for heavy cases
+	// parallel Gzip for heavy cases
 	gz := pgzip.NewWriter(fp)
-	gz.SetConcurrency(int(cs.maxFileSize/cs.gzipParallel), int(cs.gzipParallel))
+	gz.SetConcurrency(int(s.MaxFileSize/s.GzipParallel), int(s.GzipParallel))
 	return &gzipEncoder{fp: fp, gz: gz}
 }
 

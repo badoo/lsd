@@ -18,10 +18,12 @@ It has these top-level messages:
 	ResponseStats
 	RequestVersion
 	ResponseVersion
-	RequestZlogNotice
+	RequestLogNotice
 	RequestConfigJson
 	ResponseConfigJson
 	RequestReturnMemoryToOs
+	RequestLogSetLevel
+	ResponseLogSetLevel
 */
 package badoo_service
 
@@ -41,9 +43,10 @@ const (
 	RequestMsgid_REQUEST_VERSION             RequestMsgid = 2
 	RequestMsgid_REQUEST_MEMORY_STATS        RequestMsgid = 3
 	RequestMsgid_REQUEST_PROC_STATS          RequestMsgid = 4
-	RequestMsgid_REQUEST_ZLOG_NOTICE         RequestMsgid = 5
+	RequestMsgid_REQUEST_LOG_NOTICE          RequestMsgid = 5
 	RequestMsgid_REQUEST_CONFIG_JSON         RequestMsgid = 6
 	RequestMsgid_REQUEST_RETURN_MEMORY_TO_OS RequestMsgid = 7
+	RequestMsgid_REQUEST_LOG_SET_LEVEL       RequestMsgid = 8
 )
 
 var RequestMsgid_name = map[int32]string{
@@ -51,18 +54,20 @@ var RequestMsgid_name = map[int32]string{
 	2: "REQUEST_VERSION",
 	3: "REQUEST_MEMORY_STATS",
 	4: "REQUEST_PROC_STATS",
-	5: "REQUEST_ZLOG_NOTICE",
+	5: "REQUEST_LOG_NOTICE",
 	6: "REQUEST_CONFIG_JSON",
 	7: "REQUEST_RETURN_MEMORY_TO_OS",
+	8: "REQUEST_LOG_SET_LEVEL",
 }
 var RequestMsgid_value = map[string]int32{
 	"REQUEST_STATS":               1,
 	"REQUEST_VERSION":             2,
 	"REQUEST_MEMORY_STATS":        3,
 	"REQUEST_PROC_STATS":          4,
-	"REQUEST_ZLOG_NOTICE":         5,
+	"REQUEST_LOG_NOTICE":          5,
 	"REQUEST_CONFIG_JSON":         6,
 	"REQUEST_RETURN_MEMORY_TO_OS": 7,
+	"REQUEST_LOG_SET_LEVEL":       8,
 }
 
 func (x RequestMsgid) Enum() *RequestMsgid {
@@ -85,12 +90,13 @@ func (x *RequestMsgid) UnmarshalJSON(data []byte) error {
 type ResponseMsgid int32
 
 const (
-	ResponseMsgid_RESPONSE_GENERIC      ResponseMsgid = 1
-	ResponseMsgid_RESPONSE_STATS        ResponseMsgid = 2
-	ResponseMsgid_RESPONSE_VERSION      ResponseMsgid = 3
-	ResponseMsgid_RESPONSE_MEMORY_STATS ResponseMsgid = 4
-	ResponseMsgid_RESPONSE_PROC_STATS   ResponseMsgid = 5
-	ResponseMsgid_RESPONSE_CONFIG_JSON  ResponseMsgid = 6
+	ResponseMsgid_RESPONSE_GENERIC       ResponseMsgid = 1
+	ResponseMsgid_RESPONSE_STATS         ResponseMsgid = 2
+	ResponseMsgid_RESPONSE_VERSION       ResponseMsgid = 3
+	ResponseMsgid_RESPONSE_MEMORY_STATS  ResponseMsgid = 4
+	ResponseMsgid_RESPONSE_PROC_STATS    ResponseMsgid = 5
+	ResponseMsgid_RESPONSE_CONFIG_JSON   ResponseMsgid = 6
+	ResponseMsgid_RESPONSE_LOG_SET_LEVEL ResponseMsgid = 7
 )
 
 var ResponseMsgid_name = map[int32]string{
@@ -100,14 +106,16 @@ var ResponseMsgid_name = map[int32]string{
 	4: "RESPONSE_MEMORY_STATS",
 	5: "RESPONSE_PROC_STATS",
 	6: "RESPONSE_CONFIG_JSON",
+	7: "RESPONSE_LOG_SET_LEVEL",
 }
 var ResponseMsgid_value = map[string]int32{
-	"RESPONSE_GENERIC":      1,
-	"RESPONSE_STATS":        2,
-	"RESPONSE_VERSION":      3,
-	"RESPONSE_MEMORY_STATS": 4,
-	"RESPONSE_PROC_STATS":   5,
-	"RESPONSE_CONFIG_JSON":  6,
+	"RESPONSE_GENERIC":       1,
+	"RESPONSE_STATS":         2,
+	"RESPONSE_VERSION":       3,
+	"RESPONSE_MEMORY_STATS":  4,
+	"RESPONSE_PROC_STATS":    5,
+	"RESPONSE_CONFIG_JSON":   6,
+	"RESPONSE_LOG_SET_LEVEL": 7,
 }
 
 func (x ResponseMsgid) Enum() *ResponseMsgid {
@@ -187,6 +195,48 @@ func (x *AllocatorType) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*x = AllocatorType(value)
+	return nil
+}
+
+type LogLevel int32
+
+const (
+	LogLevel_LOG_DEBUG   LogLevel = 1
+	LogLevel_LOG_NOTICE  LogLevel = 2
+	LogLevel_LOG_WARNING LogLevel = 3
+	LogLevel_LOG_ERROR   LogLevel = 4
+	LogLevel_LOG_ALERT   LogLevel = 5
+)
+
+var LogLevel_name = map[int32]string{
+	1: "LOG_DEBUG",
+	2: "LOG_NOTICE",
+	3: "LOG_WARNING",
+	4: "LOG_ERROR",
+	5: "LOG_ALERT",
+}
+var LogLevel_value = map[string]int32{
+	"LOG_DEBUG":   1,
+	"LOG_NOTICE":  2,
+	"LOG_WARNING": 3,
+	"LOG_ERROR":   4,
+	"LOG_ALERT":   5,
+}
+
+func (x LogLevel) Enum() *LogLevel {
+	p := new(LogLevel)
+	*p = x
+	return p
+}
+func (x LogLevel) String() string {
+	return proto.EnumName(LogLevel_name, int32(x))
+}
+func (x *LogLevel) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(LogLevel_value, data, "LogLevel")
+	if err != nil {
+		return err
+	}
+	*x = LogLevel(value)
 	return nil
 }
 
@@ -802,16 +852,16 @@ func (m *ResponseVersion) GetMaintainer() string {
 	return ""
 }
 
-type RequestZlogNotice struct {
+type RequestLogNotice struct {
 	Text             *string `protobuf:"bytes,1,req,name=text" json:"text,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
-func (m *RequestZlogNotice) Reset()         { *m = RequestZlogNotice{} }
-func (m *RequestZlogNotice) String() string { return proto.CompactTextString(m) }
-func (*RequestZlogNotice) ProtoMessage()    {}
+func (m *RequestLogNotice) Reset()         { *m = RequestLogNotice{} }
+func (m *RequestLogNotice) String() string { return proto.CompactTextString(m) }
+func (*RequestLogNotice) ProtoMessage()    {}
 
-func (m *RequestZlogNotice) GetText() string {
+func (m *RequestLogNotice) GetText() string {
 	if m != nil && m.Text != nil {
 		return *m.Text
 	}
@@ -850,9 +900,42 @@ func (m *RequestReturnMemoryToOs) Reset()         { *m = RequestReturnMemoryToOs
 func (m *RequestReturnMemoryToOs) String() string { return proto.CompactTextString(m) }
 func (*RequestReturnMemoryToOs) ProtoMessage()    {}
 
+type RequestLogSetLevel struct {
+	Level            *LogLevel `protobuf:"varint,1,opt,name=level,enum=badoo.service.LogLevel" json:"level,omitempty"`
+	XXX_unrecognized []byte    `json:"-"`
+}
+
+func (m *RequestLogSetLevel) Reset()         { *m = RequestLogSetLevel{} }
+func (m *RequestLogSetLevel) String() string { return proto.CompactTextString(m) }
+func (*RequestLogSetLevel) ProtoMessage()    {}
+
+func (m *RequestLogSetLevel) GetLevel() LogLevel {
+	if m != nil && m.Level != nil {
+		return *m.Level
+	}
+	return LogLevel_LOG_DEBUG
+}
+
+type ResponseLogSetLevel struct {
+	Level            *LogLevel `protobuf:"varint,1,req,name=level,enum=badoo.service.LogLevel" json:"level,omitempty"`
+	XXX_unrecognized []byte    `json:"-"`
+}
+
+func (m *ResponseLogSetLevel) Reset()         { *m = ResponseLogSetLevel{} }
+func (m *ResponseLogSetLevel) String() string { return proto.CompactTextString(m) }
+func (*ResponseLogSetLevel) ProtoMessage()    {}
+
+func (m *ResponseLogSetLevel) GetLevel() LogLevel {
+	if m != nil && m.Level != nil {
+		return *m.Level
+	}
+	return LogLevel_LOG_DEBUG
+}
+
 func init() {
 	proto.RegisterEnum("badoo.service.RequestMsgid", RequestMsgid_name, RequestMsgid_value)
 	proto.RegisterEnum("badoo.service.ResponseMsgid", ResponseMsgid_name, ResponseMsgid_value)
 	proto.RegisterEnum("badoo.service.Errno", Errno_name, Errno_value)
 	proto.RegisterEnum("badoo.service.AllocatorType", AllocatorType_name, AllocatorType_value)
+	proto.RegisterEnum("badoo.service.LogLevel", LogLevel_name, LogLevel_value)
 }

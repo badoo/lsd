@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 package badoo.service;
 
 enum request_msgid {
@@ -5,9 +7,10 @@ enum request_msgid {
 	REQUEST_VERSION = 2;
 	REQUEST_MEMORY_STATS = 3;
 	REQUEST_PROC_STATS = 4;
-	REQUEST_ZLOG_NOTICE = 5;
+	REQUEST_LOG_NOTICE = 5;
 	REQUEST_CONFIG_JSON = 6;
 	REQUEST_RETURN_MEMORY_TO_OS = 7;
+	REQUEST_LOG_SET_LEVEL = 8;
 }
 
 enum response_msgid {
@@ -17,6 +20,7 @@ enum response_msgid {
 	RESPONSE_MEMORY_STATS = 4;
 	RESPONSE_PROC_STATS = 5;
 	RESPONSE_CONFIG_JSON = 6;
+	RESPONSE_LOG_SET_LEVEL = 7;
 }
 
 enum errno {
@@ -128,7 +132,7 @@ message response_version {
 	optional string maintainer = 18;
 }
 
-message request_zlog_notice {
+message request_log_notice {
 	required string text = 1;
 }
 
@@ -140,4 +144,20 @@ message response_config_json {
 }
 
 message request_return_memory_to_os {
+}
+
+enum log_level {
+	LOG_DEBUG = 1;
+	LOG_NOTICE = 2;
+	LOG_WARNING = 3;
+	LOG_ERROR = 4;
+	LOG_ALERT = 5;
+}
+
+message request_log_set_level {
+	optional log_level level = 1;
+}
+
+message response_log_set_level {
+	required log_level level = 1;
 }

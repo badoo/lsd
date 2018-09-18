@@ -5,11 +5,8 @@ import (
 	lsdProto "github.com/badoo/lsd/proto"
 	"fmt"
 	"os"
-
 	"github.com/badoo/lsd/internal/client/offsets"
-
 	"github.com/badoo/lsd/internal/client/files"
-
 	"github.com/badoo/lsd/internal/client/usage"
 
 	"context"
@@ -36,7 +33,7 @@ func NewListener(ctx context.Context, config *lsdProto.LsdConfigClientConfigT, n
 		// that's why we can use single buffer for all file reads
 		// if we allocate it on each read, we consume a lot of CPU
 		// if we create buffer for each fileInfo we consume a lot of memory
-		readBuffer:   bufio.NewReaderSize(nil, MAX_BYTES_PER_BATCH),
+		readBuffer:   bufio.NewReaderSize(nil, READ_BUFFER_SIZE),
 		cleanQueue:   make(map[string]cleanRequest),
 		offsetsDb:    odb,
 		usageChecker: checker,

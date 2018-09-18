@@ -24,6 +24,39 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+type LsdConfigServerConfigTWriteMode int32
+
+const (
+	LsdConfigServerConfigT_CHUNK_FILES LsdConfigServerConfigTWriteMode = 1
+	LsdConfigServerConfigT_PLAIN_LOG   LsdConfigServerConfigTWriteMode = 2
+)
+
+var LsdConfigServerConfigTWriteMode_name = map[int32]string{
+	1: "CHUNK_FILES",
+	2: "PLAIN_LOG",
+}
+var LsdConfigServerConfigTWriteMode_value = map[string]int32{
+	"CHUNK_FILES": 1,
+	"PLAIN_LOG":   2,
+}
+
+func (x LsdConfigServerConfigTWriteMode) Enum() *LsdConfigServerConfigTWriteMode {
+	p := new(LsdConfigServerConfigTWriteMode)
+	*p = x
+	return p
+}
+func (x LsdConfigServerConfigTWriteMode) String() string {
+	return proto.EnumName(LsdConfigServerConfigTWriteMode_name, int32(x))
+}
+func (x *LsdConfigServerConfigTWriteMode) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(LsdConfigServerConfigTWriteMode_value, data, "LsdConfigServerConfigTWriteMode")
+	if err != nil {
+		return err
+	}
+	*x = LsdConfigServerConfigTWriteMode(value)
+	return nil
+}
+
 type LsdConfig struct {
 	ServerConfig *LsdConfigServerConfigT `protobuf:"bytes,1,opt,name=server_config" json:"server_config,omitempty"`
 	ClientConfig *LsdConfigClientConfigT `protobuf:"bytes,2,opt,name=client_config" json:"client_config,omitempty"`
@@ -50,17 +83,20 @@ func (m *LsdConfig) GetClientConfig() *LsdConfigClientConfigT {
 type LsdConfigServerConfigT struct {
 	// default settings that are redefined by more concrete ones (above)
 	TargetDir                  *string                                  `protobuf:"bytes,1,req,name=target_dir" json:"target_dir,omitempty"`
-	MaxFileSize                *uint64                                  `protobuf:"varint,2,opt,name=max_file_size,def=5000000" json:"max_file_size,omitempty"`
-	FileRotateInterval         *uint64                                  `protobuf:"varint,3,opt,name=file_rotate_interval,def=5" json:"file_rotate_interval,omitempty"`
-	PerCategorySettings        []*LsdConfigServerConfigTServerSettingsT `protobuf:"bytes,4,rep,name=per_category_settings" json:"per_category_settings,omitempty"`
-	ErrorSleepInterval         *uint64                                  `protobuf:"varint,5,opt,name=error_sleep_interval,def=60" json:"error_sleep_interval,omitempty"`
-	TrafficStatsRecalcInterval *uint64                                  `protobuf:"varint,6,opt,name=traffic_stats_recalc_interval,def=10" json:"traffic_stats_recalc_interval,omitempty"`
+	Mode                       *LsdConfigServerConfigTWriteMode         `protobuf:"varint,2,opt,name=mode,enum=lsd.LsdConfigServerConfigTWriteMode,def=1" json:"mode,omitempty"`
+	MaxFileSize                *uint64                                  `protobuf:"varint,3,opt,name=max_file_size,def=5000000" json:"max_file_size,omitempty"`
+	FileRotateInterval         *uint64                                  `protobuf:"varint,4,opt,name=file_rotate_interval,def=5" json:"file_rotate_interval,omitempty"`
+	ForceFileName              *string                                  `protobuf:"bytes,5,opt,name=force_file_name" json:"force_file_name,omitempty"`
+	PerCategorySettings        []*LsdConfigServerConfigTServerSettingsT `protobuf:"bytes,6,rep,name=per_category_settings" json:"per_category_settings,omitempty"`
+	ErrorSleepInterval         *uint64                                  `protobuf:"varint,7,opt,name=error_sleep_interval,def=60" json:"error_sleep_interval,omitempty"`
+	TrafficStatsRecalcInterval *uint64                                  `protobuf:"varint,8,opt,name=traffic_stats_recalc_interval,def=10" json:"traffic_stats_recalc_interval,omitempty"`
 }
 
 func (m *LsdConfigServerConfigT) Reset()         { *m = LsdConfigServerConfigT{} }
 func (m *LsdConfigServerConfigT) String() string { return proto.CompactTextString(m) }
 func (*LsdConfigServerConfigT) ProtoMessage()    {}
 
+const Default_LsdConfigServerConfigT_Mode LsdConfigServerConfigTWriteMode = LsdConfigServerConfigT_CHUNK_FILES
 const Default_LsdConfigServerConfigT_MaxFileSize uint64 = 5000000
 const Default_LsdConfigServerConfigT_FileRotateInterval uint64 = 5
 const Default_LsdConfigServerConfigT_ErrorSleepInterval uint64 = 60
@@ -71,6 +107,13 @@ func (m *LsdConfigServerConfigT) GetTargetDir() string {
 		return *m.TargetDir
 	}
 	return ""
+}
+
+func (m *LsdConfigServerConfigT) GetMode() LsdConfigServerConfigTWriteMode {
+	if m != nil && m.Mode != nil {
+		return *m.Mode
+	}
+	return Default_LsdConfigServerConfigT_Mode
 }
 
 func (m *LsdConfigServerConfigT) GetMaxFileSize() uint64 {
@@ -85,6 +128,13 @@ func (m *LsdConfigServerConfigT) GetFileRotateInterval() uint64 {
 		return *m.FileRotateInterval
 	}
 	return Default_LsdConfigServerConfigT_FileRotateInterval
+}
+
+func (m *LsdConfigServerConfigT) GetForceFileName() string {
+	if m != nil && m.ForceFileName != nil {
+		return *m.ForceFileName
+	}
+	return ""
 }
 
 func (m *LsdConfigServerConfigT) GetPerCategorySettings() []*LsdConfigServerConfigTServerSettingsT {
@@ -109,17 +159,20 @@ func (m *LsdConfigServerConfigT) GetTrafficStatsRecalcInterval() uint64 {
 }
 
 type LsdConfigServerConfigTServerSettingsT struct {
-	Categories         []string `protobuf:"bytes,1,rep,name=categories" json:"categories,omitempty"`
-	MaxFileSize        *uint64  `protobuf:"varint,2,opt,name=max_file_size" json:"max_file_size,omitempty"`
-	FileRotateInterval *uint64  `protobuf:"varint,3,opt,name=file_rotate_interval" json:"file_rotate_interval,omitempty"`
-	Gzip               *bool    `protobuf:"varint,4,opt,name=gzip,def=0" json:"gzip,omitempty"`
-	GzipParallel       *uint64  `protobuf:"varint,5,opt,name=gzip_parallel,def=1" json:"gzip_parallel,omitempty"`
+	Categories         []string                         `protobuf:"bytes,1,rep,name=categories" json:"categories,omitempty"`
+	Mode               *LsdConfigServerConfigTWriteMode `protobuf:"varint,2,opt,name=mode,enum=lsd.LsdConfigServerConfigTWriteMode,def=1" json:"mode,omitempty"`
+	MaxFileSize        *uint64                          `protobuf:"varint,3,opt,name=max_file_size" json:"max_file_size,omitempty"`
+	FileRotateInterval *uint64                          `protobuf:"varint,4,opt,name=file_rotate_interval" json:"file_rotate_interval,omitempty"`
+	ForceFileName      *string                          `protobuf:"bytes,5,opt,name=force_file_name" json:"force_file_name,omitempty"`
+	Gzip               *bool                            `protobuf:"varint,6,opt,name=gzip,def=0" json:"gzip,omitempty"`
+	GzipParallel       *uint64                          `protobuf:"varint,7,opt,name=gzip_parallel,def=1" json:"gzip_parallel,omitempty"`
 }
 
 func (m *LsdConfigServerConfigTServerSettingsT) Reset()         { *m = LsdConfigServerConfigTServerSettingsT{} }
 func (m *LsdConfigServerConfigTServerSettingsT) String() string { return proto.CompactTextString(m) }
 func (*LsdConfigServerConfigTServerSettingsT) ProtoMessage()    {}
 
+const Default_LsdConfigServerConfigTServerSettingsT_Mode LsdConfigServerConfigTWriteMode = LsdConfigServerConfigT_CHUNK_FILES
 const Default_LsdConfigServerConfigTServerSettingsT_Gzip bool = false
 const Default_LsdConfigServerConfigTServerSettingsT_GzipParallel uint64 = 1
 
@@ -128,6 +181,13 @@ func (m *LsdConfigServerConfigTServerSettingsT) GetCategories() []string {
 		return m.Categories
 	}
 	return nil
+}
+
+func (m *LsdConfigServerConfigTServerSettingsT) GetMode() LsdConfigServerConfigTWriteMode {
+	if m != nil && m.Mode != nil {
+		return *m.Mode
+	}
+	return Default_LsdConfigServerConfigTServerSettingsT_Mode
 }
 
 func (m *LsdConfigServerConfigTServerSettingsT) GetMaxFileSize() uint64 {
@@ -142,6 +202,13 @@ func (m *LsdConfigServerConfigTServerSettingsT) GetFileRotateInterval() uint64 {
 		return *m.FileRotateInterval
 	}
 	return 0
+}
+
+func (m *LsdConfigServerConfigTServerSettingsT) GetForceFileName() string {
+	if m != nil && m.ForceFileName != nil {
+		return *m.ForceFileName
+	}
+	return ""
 }
 
 func (m *LsdConfigServerConfigTServerSettingsT) GetGzip() bool {
@@ -362,4 +429,8 @@ func (m *LsdConfigClientConfigTRoutingConfigT) GetGzip() bool {
 		return *m.Gzip
 	}
 	return Default_LsdConfigClientConfigTRoutingConfigT_Gzip
+}
+
+func init() {
+	proto.RegisterEnum("lsd.LsdConfigServerConfigTWriteMode", LsdConfigServerConfigTWriteMode_name, LsdConfigServerConfigTWriteMode_value)
 }

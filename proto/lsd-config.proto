@@ -7,21 +7,28 @@ message lsd_config {
 
     message server_config_t {
 
+        enum write_mode {
+            CHUNK_FILES = 1;
+            PLAIN_LOG = 2;
+        }
+
         message server_settings_t {
-            repeated string categories = 1;                 // category masks list (only "*" is supported as mask)
-            optional uint64 max_file_size = 2;              // max output file size in bytes
-            optional uint64 file_rotate_interval = 3;       // output file rotate interval in seconds
-            optional bool gzip = 4 [default = false];       // gzip data that is written to disk
-            optional uint64 gzip_parallel = 5 [default = 1];// use this only if you are 100% sure that you need parallel gzip
+            repeated string categories = 1;                         // category masks list (only "*" is supported as mask)
+            optional write_mode mode = 2 [default = CHUNK_FILES];   // whether use plain or chunked scheme
+            optional uint64 max_file_size = 3;               // max output file size in bytes
+            optional uint64 file_rotate_interval = 4;        // output file rotate interval in seconds
+            optional bool gzip = 5 [default = false];        // gzip data that is written to disk
+            optional uint64 gzip_parallel = 6 [default = 1]; // use this only if you are 100% sure that you need parallel gzip
         };
 
         // default settings that are redefined by more concrete ones (above)
         required string target_dir = 1;
-        optional uint64 max_file_size = 2 [default = 5000000];           // max output file size in bytes
-        optional uint64 file_rotate_interval = 3 [default = 5];          // output file rotate interval in seconds
-        repeated server_settings_t per_category_settings = 4;            // per-category settings (max_file_size and file_rotate_interval)
-        optional uint64 error_sleep_interval = 5 [default = 60];
-        optional uint64 traffic_stats_recalc_interval = 6 [default = 10];// update traffic stats in seconds
+        optional write_mode mode = 2 [default = CHUNK_FILES];
+        optional uint64 max_file_size = 3 [default = 5000000];           // max output file size in bytes
+        optional uint64 file_rotate_interval = 4 [default = 5];          // output file rotate interval in seconds
+        repeated server_settings_t per_category_settings = 5;            // per-category settings (max_file_size and file_rotate_interval)
+        optional uint64 error_sleep_interval = 6 [default = 60];
+        optional uint64 traffic_stats_recalc_interval = 7 [default = 10];// update traffic stats in seconds
     };
 
     message client_config_t {
@@ -47,8 +54,8 @@ message lsd_config {
         optional bool always_flock           = 5 [default = false];   // always flock files, required for re-streaming
         repeated routing_config_t routing    = 6;
 
-        optional uint64 file_events_buffer_size = 7    [default = 500];    // buffer size for file events to each category (can be raised to smooth spikes, but will consume more memory)
-        optional uint64 out_buffer_size = 8            [default = 50];
+        optional uint64 file_events_buffer_size = 7    [default = 100];    // buffer size for file events to each category (can be raised to smooth spikes, but will consume more memory)
+        optional uint64 out_buffer_size = 8            [default = 10];
 
         optional uint64 usage_check_interval = 9           [default = 60];    // file usage check in seconds (after rotate, before clean)
         optional uint64 offsets_save_interval = 10         [default = 1];     // save offsets db to disk in seconds

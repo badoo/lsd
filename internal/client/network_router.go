@@ -35,10 +35,11 @@ func NewNetworkRouter(offsetsDb *offsets.Db, trafficManager *traffic.Manager, co
 		return nil, errors.New("no default section in config")
 	}
 
-	// starting balancer for each section
-	// and save category regex => events channel mapping
-	router := &NetworkRouter{}
-
+	router := &NetworkRouter{
+		offsetsDb:      offsetsDb,
+		trafficManager: trafficManager,
+		balancers:      make(map[string]*network.Balancer),
+	}
 	// get categories ordered from most specific to least specific, aka
 	// 1. categories without wildcards
 	// 2. categories with wildcards, sorted by longest literal prefix
@@ -47,21 +48,25 @@ func NewNetworkRouter(offsetsDb *offsets.Db, trafficManager *traffic.Manager, co
 
 	for _, confRouting := range config.GetRouting() {
 
-		balancer := network.NewBalancer(offsetsDb, trafficManager, config.GetOutBufferSize(), confRouting)
-		router.balancers = append(router.balancers, balancer)
-
 		if isDefaultSection(confRouting) {
-			router.defaultBalancer = balancer
+			router.defaultCategory = categoryInfo{
+				routingConfig: confRouting,
+				outBufferSize: config.GetOutBufferSize(),
+			}
 			continue
 		}
 
 		for _, cat := range confRouting.Categories {
 
 			re := regexp.MustCompile("^" + strings.Replace(regexp.QuoteMeta(cat), "\\*", ".*", -1) + "$")
-
 			prefix, complete := re.LiteralPrefix()
 
-			cat := categoryInfo{prefix: prefix, regex: re, balancer: balancer}
+			cat := categoryInfo{
+				prefix:        prefix,
+				regex:         re,
+				outBufferSize: config.GetOutBufferSize(),
+				routingConfig: confRouting,
+			}
 			if complete == true {
 				fullMatches = append(fullMatches, cat)
 			} else {
@@ -79,15 +84,12 @@ func NewNetworkRouter(offsetsDb *offsets.Db, trafficManager *traffic.Manager, co
 }
 
 type NetworkRouter struct {
-	balancers       []*network.Balancer
-	categories      []categoryInfo
-	defaultBalancer *network.Balancer
-}
+	trafficManager *traffic.Manager
+	offsetsDb      *offsets.Db
 
-func (r *NetworkRouter) start() {
-	for _, b := range r.balancers {
-		b.Start()
-	}
+	balancers       map[string]*network.Balancer
+	categories      []categoryInfo
+	defaultCategory categoryInfo
 }
 
 func (r *NetworkRouter) stop() {
@@ -102,20 +104,27 @@ func (r *NetworkRouter) stop() {
 	wg.Wait()
 }
 
-func (r *NetworkRouter) GetBalancerForCategory(category string) *network.Balancer {
-
-	for _, cat := range r.categories {
-		if cat.regex.MatchString(category) {
-			log.Debugf("using %s match for category: %s", cat.regex, category)
-			return cat.balancer
-		}
-	}
-	log.Debugf("using default route for category: %s", category)
-	return r.defaultBalancer
-}
-
 func (r *NetworkRouter) getOutChanForCategory(category string) chan *lsdProto.RequestNewEventsEventT {
-	return r.GetBalancerForCategory(category).InChan
+
+	b, ok := r.balancers[category]
+	if ok {
+		return b.InChan
+	}
+
+	cat := func() categoryInfo {
+		for _, cat := range r.categories {
+			if cat.regex.MatchString(category) {
+				log.Debugf("using %s match for category: %s", cat.regex, category)
+				return cat
+			}
+		}
+		log.Debugf("using default route for category: %s", category)
+		return r.defaultCategory
+	}()
+	b = network.NewBalancer(r.offsetsDb, r.trafficManager, cat.outBufferSize, cat.routingConfig)
+	b.Start()
+	r.balancers[category] = b
+	return b.InChan
 }
 
 func isDefaultSection(s *lsdProto.LsdConfigClientConfigTRoutingConfigT) bool {
@@ -123,7 +132,8 @@ func isDefaultSection(s *lsdProto.LsdConfigClientConfigTRoutingConfigT) bool {
 }
 
 type categoryInfo struct {
-	prefix   string
-	regex    *regexp.Regexp
-	balancer *network.Balancer
+	prefix        string
+	regex         *regexp.Regexp
+	routingConfig *lsdProto.LsdConfigClientConfigTRoutingConfigT
+	outBufferSize uint64
 }

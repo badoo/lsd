@@ -60,6 +60,50 @@ func TestSimple(t *testing.T) {
 	checkFile(t, testString, dir+"/test/test_current")
 }
 
+func TestPlain(t *testing.T) {
+	dir, err := ioutil.TempDir("", "lsd_test")
+	if err != nil {
+		t.Fatalf("can't create temp dir: %s", err)
+	}
+	defer os.RemoveAll(dir)
+
+	mode := lsd.LsdConfigServerConfigT_PLAIN_LOG
+	handler, err := NewHandler(&lsd.LsdConfigServerConfigT{
+		Mode:               &mode,
+		TargetDir:          proto.String(dir),
+		MaxFileSize:        proto.Uint64(10),
+		FileRotateInterval: proto.Uint64(10),
+	}, getTrafficManager())
+	if err != nil {
+		t.Fatalf("handler create failed: %s", err)
+	}
+	defer handler.Shutdown()
+
+	testString := "test1\ntest2\ntest3\n"
+
+	event := lsd.RequestNewEventsEventT{
+		Category: proto.String("test"),
+		Inode:    proto.Uint64(1),
+		Offset:   proto.Uint64(2),
+		Lines:    []string{testString},
+	}
+	resp := handler.RequestNewEvents(gpbrpc.RequestT{}, &lsd.RequestNewEvents{Events: []*lsd.RequestNewEventsEventT{&event}})
+	offsets := getResponse(t, resp)
+	if len(offsets.Offsets) != 1 {
+		t.Fatalf("bad response %v", offsets)
+	}
+
+	if offsets.Offsets[0].GetInode() != 1 {
+		t.Errorf("bad inode %d, want 1", offsets.Offsets[0].GetInode())
+	}
+
+	if offsets.Offsets[0].GetOffset() != 2 {
+		t.Errorf("bad offset %d, want 2", offsets.Offsets[0].GetOffset())
+	}
+
+	checkFile(t, testString, dir+"/test")
+}
+
 func TestNoRotate(t *testing.T) {
 	dir, err := ioutil.TempDir("", "lsd_test")
 	if err != nil {
@@ -230,7 +274,7 @@ func getResponse(t *testing.T, resp gpbrpc.ResultT) *lsd.ResponseOffsets {
 func checkFile(t *testing.T, content string, fileName string) {
 	msg, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		t.Fatalf("file read failed")
+		t.Fatalf("file %s read failed", fileName)
 	}
 
 	if string(msg) != content {

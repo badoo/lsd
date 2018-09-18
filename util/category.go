@@ -1,4 +1,4 @@
-package lsd
+package util
 
 import (
 	"fmt"

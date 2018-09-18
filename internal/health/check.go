@@ -6,6 +6,7 @@ import (
 	"badoo/_packages/service/config"
 	"github.com/badoo/lsd/internal/client"
 	"github.com/badoo/lsd/internal/client/offsets"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -19,19 +20,30 @@ import (
 
 	"io"
 
+	"badoo/_packages/gpbrpc"
+	"badoo/_packages/service/stats"
+
+	"io/ioutil"
+	"net/http"
+	"time"
+
 	"github.com/fsnotify/fsnotify"
 	"golang.org/x/sync/errgroup"
 )
 
 const HEALTHCHECK_BUFFER_SIZE = 1000
+const HEALTHCHECK_STATS_CONNECT_TIMEOUT = time.Second * 3
+const HEALTHCHECK_STATS_REQUEST_TIMEOUT = time.Second * 3
 
 type Result struct {
-	Client ClientResult `json:"client"`
-	Server ServerResult `json:"server"`
+	IsRunning bool         `json:"is_running"`
+	Client    ClientResult `json:"client"`
+	Server    ServerResult `json:"server"`
 }
 
 type ClientResult struct {
 	Undelivered map[string]uint64 `json:"undelivered"`
+	BacklogSize int               `json:"backlog_size"`
 	Errors      []string          `json:"errors"`
 }
 
@@ -68,9 +80,19 @@ func Check() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.Level(config.DaemonConfig.GetLogLevel()))
 
+	isUp, err := isDaemonUp(config.GetDaemonConfig().GetListen())
+	if err != nil {
+		log.Fatalf("failed to check that daemon is up: %v", err)
+	}
+	backlogSize, err := getBacklogSize(isUp, config.GetDaemonConfig())
+	if err != nil {
+		log.Fatalf("failed to get backlog size: %v", err)
+	}
+
 	res := Result{
-		Client: checkClient(config.GetClientConfig()),
-		Server: checkServer(config.GetServerConfig()),
+		IsRunning: isUp,
+		Client:    checkClient(config.GetClientConfig(), backlogSize),
+		Server:    checkServer(config.GetServerConfig()),
 	}
 	jsonBytes, err := json.Marshal(res)
 	if err != nil {
@@ -79,10 +101,64 @@ func Check() {
 	fmt.Println(string(jsonBytes))
 }
 
-func checkClient(config *lsd.LsdConfigClientConfigT) ClientResult {
+func isDaemonUp(listenRows []*badoo_config.ServiceConfigDaemonConfigTListenT) (bool, error) {
+
+	for _, listen := range listenRows {
+		if listen.GetProto() != "service-stats-gpb" {
+			continue
+		}
+		port, err := extractPort(listen.GetAddress())
+		if err != nil {
+			return false, fmt.Errorf("invalid service-stats-gpb listen format: %v", err)
+		}
+		cli := gpbrpc.NewClient(
+			"localhost:"+port,
+			&badoo_service.Gpbrpc,
+			&gpbrpc.GpbsCodec,
+			HEALTHCHECK_STATS_CONNECT_TIMEOUT,
+			HEALTHCHECK_STATS_REQUEST_TIMEOUT,
+		)
+		_, _, err = cli.Call(&badoo_service.RequestStats{})
+		cli.Close()
+		return err == nil, nil
+	}
+	return false, errors.New("no service-stats-gpb section in config")
+}
+
+func getBacklogSize(isUp bool, daemonConfig *badoo_config.ServiceConfigDaemonConfigT) (int, error) {
+	if !isUp {
+		return 0, nil
+	}
+	port, err := extractPort(daemonConfig.GetHttpPprofAddr())
+	if err != nil {
+		return 0, fmt.Errorf("invalid http pprof address: %v", err)
+	}
+	resp, err := http.Get("http://localhost:" + port + "/debug/vars")
+	if err != nil {
+		return 0, fmt.Errorf("http request failed: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		return 0, fmt.Errorf("http request failed with non-200 status code: %d", resp.StatusCode)
+	}
+	jsonResp, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read http response body: %v", err)
+	}
+	debugVars := &struct {
+		BacklogSize int `json:"out_backlog_size"`
+	}{}
+	err = json.Unmarshal(jsonResp, debugVars)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decode json respose: %v", err)
+	}
+	return debugVars.BacklogSize, nil
+}
+
+func checkClient(config *lsd.LsdConfigClientConfigT, backlogSize int) ClientResult {
 
 	result := ClientResult{
 		Undelivered: make(map[string]uint64),
+		BacklogSize: backlogSize,
 		Errors:      make([]string, 0),
 	}
 	if config == nil {
@@ -114,6 +190,9 @@ func checkClient(config *lsd.LsdConfigClientConfigT) ClientResult {
 				}
 				err := func() error {
 					st, err := files.Lstat(event.Name)
+					if os.IsNotExist(err) {
+						return nil
+					}
 					if err != nil {
 						return fmt.Errorf("failed to stat %s: %v", event.Name, err)
 					}
@@ -217,4 +296,12 @@ func checkServer(config *lsd.LsdConfigServerConfigT) ServerResult {
 		}
 	}
 	return result
+}
+
+func extractPort(s string) (string, error) {
+	chunks := strings.SplitN(s, ":", 2)
+	if len(chunks) < 2 {
+		return s, fmt.Errorf("invalid address format address: %s", s)
+	}
+	return chunks[1], nil
 }

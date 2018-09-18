@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"badoo/_packages/log"
-	"badoo/_packages/lsd"
+	"github.com/badoo/lsd/util"
 	"context"
 	"path"
 	"strings"
@@ -21,7 +21,7 @@ import (
 )
 
 const FILES_BUFFER_SIZE = 100
-const ERROR_SLEEP_INTERVAL = time.Second * 10
+const ERROR_SLEEP_INTERVAL = time.Second * 5
 
 func showHelp() {
 	fmt.Printf("usage: %s <flags> <absolute path to lsd category>\n", os.Args[0])
@@ -82,7 +82,7 @@ func Transfer() {
 	select {}
 }
 
-func transferCategory(categoryPath string, numWorkers int, doDelete bool, uploader *uploader) {
+func transferCategory(categoryPath string, numWorkers int, shouldDelete bool, u *uploader) {
 
 	filesCh := make(chan string, FILES_BUFFER_SIZE)
 	// sending to hdfs
@@ -90,39 +90,58 @@ func transferCategory(categoryPath string, numWorkers int, doDelete bool, upload
 		go func() {
 			for {
 				fileName := <-filesCh
-				err := backoff.Retry(
-					func() error {
-						return uploader.upload(fileName)
-					},
-					backoff.WithMaxTries(backoff.NewConstantBackOff(ERROR_SLEEP_INTERVAL), 3),
-				)
-				if err != nil {
-					log.Errorf("failed to upload %s: %v", fileName, err)
-					continue
-				}
-				_, err = fmt.Fprintln(os.Stdout, fileName)
-				if err != nil {
-					log.Errorf("failed to write to STDOUT: %v", err)
-					continue
-				}
-				if !doDelete {
-					continue
-				}
-				err = os.Remove(fileName)
-				if err != nil && !os.IsNotExist(err) {
-					log.Errorf("failed to delete %s: %v", fileName, err)
+
+				doUpload(u, fileName)
+
+				fmt.Println(fileName)
+
+				if shouldDelete {
+					doDelete(fileName)
 				}
 			}
 		}()
 	}
 	// reading from lsd
 	baseDir, categoryName := path.Split(categoryPath)
-	category := lsd.Category{BaseDir: baseDir, Name: categoryName}
+	category := util.Category{BaseDir: baseDir, Name: categoryName}
 	for {
-		err := lsd.Watch(context.TODO(), category, filesCh)
+		err := util.Watch(context.TODO(), category, filesCh)
 		if err != nil {
 			log.Errorf("lsd watch for %v failed: %v", category, err)
 			time.Sleep(ERROR_SLEEP_INTERVAL)
 		}
 	}
+}
+
+func doUpload(u *uploader, name string) {
+	// all files are the same for uploader,
+	// so we should try as much as needed with constant backoff
+	// to upload each one before getting next
+	// if we get stuck for long, it means that something really went wrong
+	backoff.RetryNotify(
+		// upload to hdfs
+		func() error {
+			return u.upload(name)
+		},
+		backoff.NewConstantBackOff(ERROR_SLEEP_INTERVAL),
+		func(err error, d time.Duration) {
+			log.Errorf("upload failed: %v retry in %.2f seconds", err, d.Seconds())
+		},
+	)
+}
+
+func doDelete(name string) {
+	backoff.RetryNotify(
+		func() error {
+			err := os.Remove(name)
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		},
+		backoff.NewConstantBackOff(ERROR_SLEEP_INTERVAL),
+		func(err error, d time.Duration) {
+			log.Errorf("delete failed: %v retry in %.2f seconds", err, d.Seconds())
+		},
+	)
 }

@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"badoo/_packages/util"
+
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -34,10 +36,6 @@ func getrusage(who int) (*syscall.Rusage, error) {
 	rusage := &syscall.Rusage{}
 	err := syscall.Getrusage(who, rusage)
 	return rusage, err
-}
-
-func timevalToFloat32(tv *syscall.Timeval) float32 {
-	return float32(tv.Sec) + float32(tv.Usec)/float32(1000*1000)
 }
 
 func gatherServiceStats() (*badoo_service.ResponseStats, error) {
@@ -91,8 +89,8 @@ func gatherServiceStats() (*badoo_service.ResponseStats, error) {
 	r := &badoo_service.ResponseStats{
 		Uptime: proto.Uint32(uint32(time.Since(GetStartupTime()).Seconds())),
 		RusageSelf: &badoo_service.ResponseStatsRusage{
-			RuUtime:   proto.Float32(timevalToFloat32(&ru.Utime)),
-			RuStime:   proto.Float32(timevalToFloat32(&ru.Stime)),
+			RuUtime:   proto.Float32(util.TimevalToFloat32(&ru.Utime)),
+			RuStime:   proto.Float32(util.TimevalToFloat32(&ru.Stime)),
 			RuMaxrss:  proto.Uint64(uint64(ru.Maxrss)),
 			RuMinflt:  proto.Uint64(uint64(ru.Minflt)),
 			RuMajflt:  proto.Uint64(uint64(ru.Majflt)),
@@ -159,10 +157,61 @@ func (s *statsContext) RequestVersion(rctx gpbrpc.RequestT, request *badoo_servi
 	return gpbrpc.Result(&VersionInfo)
 }
 
-func (s *statsContext) RequestZlogNotice(rctx gpbrpc.RequestT, request *badoo_service.RequestZlogNotice) gpbrpc.ResultT {
+func (s *statsContext) RequestLogNotice(rctx gpbrpc.RequestT, request *badoo_service.RequestLogNotice) gpbrpc.ResultT {
 	log.Infof("%q", request.GetText())
 
 	return badoo_service.Gpbrpc.OK()
+}
+
+func (s *statsContext) RequestLogSetLevel(rctx gpbrpc.RequestT, request *badoo_service.RequestLogSetLevel) gpbrpc.ResultT {
+
+	oldLevel := log.GetLevel()
+
+	if request.Level != nil {
+		var newLevel log.Level
+
+		switch request.GetLevel() {
+		case badoo_service.LogLevel_LOG_DEBUG:
+			newLevel = log.DebugLevel
+		case badoo_service.LogLevel_LOG_NOTICE:
+			newLevel = log.InfoLevel
+		case badoo_service.LogLevel_LOG_WARNING:
+			newLevel = log.WarnLevel
+		case badoo_service.LogLevel_LOG_ERROR, badoo_service.LogLevel_LOG_ALERT:
+			newLevel = log.ErrorLevel
+		default:
+			return badoo_service.Gpbrpc.ErrorGeneric(fmt.Sprintf("unknown or unsupported log level %v", request.GetLevel()))
+		}
+
+		log.SetLevel(newLevel)
+	}
+
+	oldLevelPB, err := func(level log.Level) (*badoo_service.LogLevel, error) {
+		var l badoo_service.LogLevel
+		switch level {
+		case log.DebugLevel:
+			l = badoo_service.LogLevel_LOG_DEBUG
+		case log.InfoLevel:
+			l = badoo_service.LogLevel_LOG_NOTICE
+		case log.WarnLevel:
+			l = badoo_service.LogLevel_LOG_WARNING
+		case log.ErrorLevel:
+			l = badoo_service.LogLevel_LOG_ERROR
+		case log.FatalLevel:
+			l = badoo_service.LogLevel_LOG_ALERT
+		default:
+			return nil, fmt.Errorf("error while converting internal log_level %v to external one", level)
+		}
+		return &l, nil
+	}(oldLevel)
+
+	if err != nil {
+		return badoo_service.Gpbrpc.ErrorGeneric(fmt.Sprintf("%s", err))
+	}
+
+	return gpbrpc.Result(&badoo_service.ResponseLogSetLevel{
+		Level:    oldLevelPB,
+	})
 }
 
 func (s *statsContext) RequestConfigJson(rctx gpbrpc.RequestT, request *badoo_service.RequestConfigJson) gpbrpc.ResultT {
