@@ -316,7 +316,7 @@ Router is a "fan out" in target DC (sends to appropriate local servers)
 },
 ``` 
 
-# Exploitation
+# Operations
 
 ## Daemon user
 The best way to run LSD is to do it under the same user that writes to files. If multiple users write to filesystem then you will need to run LSD as root (not recommended) or give it permissions to stat() open file descriptors using `setcap`.
